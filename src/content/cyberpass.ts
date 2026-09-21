@@ -19,7 +19,7 @@ function findFields(): ScanResult {
 }
 function elementForField(field:CyberPassField):HTMLElement|null { const ordered=[...field.controls].sort((a,b)=>({textarea:0,contenteditable:1,select:2,input:3}[a.tag]??4)-({textarea:0,contenteditable:1,select:2,input:3}[b.tag]??4)); const c=ordered[0]; if(!c)return null; if(c.id)return document.getElementById(c.id); if(c.selectorHint){try{return document.querySelector(c.selectorHint)}catch{}} return null; }
 function mark(el:HTMLElement,kind:'ok'|'warn'|'fail'){const old=el.style.outline; el.style.outline=kind==='ok'?'3px solid #2e9d62':kind==='warn'?'3px solid #d97706':'3px solid #dc2626'; el.style.outlineOffset='2px'; setTimeout(()=>{el.style.outline=old;el.style.outlineOffset='';},3500);}
-function startsWithNotApplicable(value:string):boolean{return /^\s*N\/A(?:\s|$|[-:])/i.test(value);}
+function startsWithNotApplicable(value:string):boolean{return /^\s*n\/a\b/i.test(value);}
 function answerElementForField(field:CyberPassField):HTMLElement|null {
   const control=field.controls.find(item=>item.id?.toLowerCase().endsWith('.answer'));
   return control?.id?document.getElementById(control.id):null;
@@ -28,7 +28,7 @@ function markNotApplicable(field:CyberPassField):boolean {
   const answer=answerElementForField(field);
   if(!answer)return false;
   if(answer instanceof HTMLSelectElement){
-    const option=[...answer.options].find(item=>/^\s*N\/A\b/i.test(item.text));
+    const option=[...answer.options].find(item=>/^\s*n\/a\b/i.test(item.text));
     if(!option)return false;
     answer.value=option.value;
     answer.dispatchEvent(new Event('change',{bubbles:true}));
@@ -39,7 +39,7 @@ function markNotApplicable(field:CyberPassField):boolean {
     answer.focus();
     answer.click();
     setNativeValue(answer,'N/A');
-    const option=[...document.querySelectorAll<HTMLElement>('[role="option"], .ant-select-item-option-content')].find(item=>/^\s*N\/A\b/i.test(item.textContent||''));
+    const option=[...document.querySelectorAll<HTMLElement>('[role="option"], .ant-select-item-option-content')].find(item=>/^\s*n\/a\b/i.test(item.textContent||''));
     option?.click();
     mark(answer,'ok');
     return true;

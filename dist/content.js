@@ -97,7 +97,7 @@ function mark(el, kind) {
   }, 3500);
 }
 function startsWithNotApplicable(value) {
-  return /^\s*N\/A(?:\s|$|[-:])/i.test(value);
+  return /^\s*n\/a\b/i.test(value);
 }
 function answerElementForField(field) {
   const control = field.controls.find((item) => item.id?.toLowerCase().endsWith(".answer"));
@@ -107,7 +107,7 @@ function markNotApplicable(field) {
   const answer = answerElementForField(field);
   if (!answer) return false;
   if (answer instanceof HTMLSelectElement) {
-    const option = [...answer.options].find((item) => /^\s*N\/A\b/i.test(item.text));
+    const option = [...answer.options].find((item) => /^\s*n\/a\b/i.test(item.text));
     if (!option) return false;
     answer.value = option.value;
     answer.dispatchEvent(new Event("change", { bubbles: true }));
@@ -118,7 +118,7 @@ function markNotApplicable(field) {
     answer.focus();
     answer.click();
     setNativeValue(answer, "N/A");
-    const option = [...document.querySelectorAll('[role="option"], .ant-select-item-option-content')].find((item) => /^\s*N\/A\b/i.test(item.textContent || ""));
+    const option = [...document.querySelectorAll('[role="option"], .ant-select-item-option-content')].find((item) => /^\s*n\/a\b/i.test(item.textContent || ""));
     option?.click();
     mark(answer, "ok");
     return true;
