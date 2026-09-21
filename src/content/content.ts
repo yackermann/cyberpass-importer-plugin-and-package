@@ -24,7 +24,7 @@ if (!isCyberPassQuestionnairePage()) {
   chrome.storage.local.get({ overrideRequirementColour: false }, (settings: any) => applyDescriptionColorOverride(Boolean(settings.overrideRequirementColour)));
   chrome.runtime.onMessage.addListener((message: Message, _sender: any, sendResponse: any) => {
   try {
-    if (message.type === 'SCAN_PAGE') sendResponse(scanPage());
+    if (message.type === 'SCAN_PAGE') scanPage().then(sendResponse).catch((error: unknown) => sendResponse({error: String(error)}));
     else if (message.type === 'PREVIEW') preview(message.requirements).then(sendResponse).catch((error: unknown) => sendResponse({error: String(error)}));
     else if (message.type === 'FILL') fill(message.requirements, message.options).then(sendResponse).catch((error: unknown) => sendResponse({error: String(error)}));
     else if (message.type === 'DEBUG_DOM') sendResponse(debugDom());

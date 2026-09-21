@@ -96,8 +96,13 @@ function mark(el, kind) {
     el.style.outlineOffset = "";
   }, 3500);
 }
-function scanPage() {
-  return findFields();
+async function scanPage() {
+  const fieldsById = /* @__PURE__ */ new Map();
+  await walkLazyRequirements((fields2) => {
+    for (const field of fields2) fieldsById.set(field.requirementId, field);
+  });
+  const fields = [...fieldsById.values()];
+  return { fields, debug: fields.map((field) => ({ requirementId: field.requirementId, text: field.containerText, controls: field.controls.map(({ tag, type, name, id, ariaLabel }) => ({ tag, type, name, id, ariaLabel })) })) };
 }
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -262,7 +267,7 @@ if (!isCyberPassQuestionnairePage()) {
   chrome.storage.local.get({ overrideRequirementColour: false }, (settings) => applyDescriptionColorOverride(Boolean(settings.overrideRequirementColour)));
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     try {
-      if (message.type === "SCAN_PAGE") sendResponse(scanPage());
+      if (message.type === "SCAN_PAGE") scanPage().then(sendResponse).catch((error) => sendResponse({ error: String(error) }));
       else if (message.type === "PREVIEW") preview(message.requirements).then(sendResponse).catch((error) => sendResponse({ error: String(error) }));
       else if (message.type === "FILL") fill(message.requirements, message.options).then(sendResponse).catch((error) => sendResponse({ error: String(error) }));
       else if (message.type === "DEBUG_DOM") sendResponse(debugDom());

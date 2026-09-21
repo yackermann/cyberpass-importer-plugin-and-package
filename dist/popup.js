@@ -301,7 +301,11 @@ function renderRows(rows) {
 function escapeHtml(value) {
   return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[c] || c);
 }
-async function doPreview() {
+function confirmPageMovement() {
+  return window.confirm("The CyberPass page will scroll while the extension loads dynamically rendered requirements. You will see the page moving. Continue?");
+}
+async function doPreview(askToScroll = true) {
+  if (askToScroll && !confirmPageMovement()) return;
   try {
     const result = await send({ type: "PREVIEW", requirements });
     lastPreview = result;
@@ -320,6 +324,7 @@ async function doPreview() {
   }
 }
 scanBtn.addEventListener("click", async () => {
+  if (!confirmPageMovement()) return;
   try {
     const result = await send({ type: "SCAN_PAGE" });
     pageCount.textContent = String(result.fields.length);
@@ -328,12 +333,13 @@ scanBtn.addEventListener("click", async () => {
     setStatus("Open the CyberPass assessment tab before scanning.", "error");
   }
 });
-previewBtn.addEventListener("click", doPreview);
+previewBtn.addEventListener("click", () => doPreview());
 fillBtn.addEventListener("click", async () => {
+  if (!confirmPageMovement()) return;
   try {
     const result = await send({ type: "FILL", requirements, options: { replaceExisting: replace.checked } });
     setStatus(`Filled ${result.filled}; skipped ${result.skipped}; ${result.mismatches} mismatch warnings; ${result.failed} failed. The form was not submitted.`, result.failed ? "error" : "ok");
-    if (lastPreview) await doPreview();
+    if (lastPreview) await doPreview(false);
   } catch (e) {
     setStatus(String(e), "error");
   }

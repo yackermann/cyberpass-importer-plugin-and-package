@@ -19,7 +19,12 @@ function findFields(): ScanResult {
 }
 function elementForField(field:CyberPassField):HTMLElement|null { const ordered=[...field.controls].sort((a,b)=>({textarea:0,contenteditable:1,select:2,input:3}[a.tag]??4)-({textarea:0,contenteditable:1,select:2,input:3}[b.tag]??4)); const c=ordered[0]; if(!c)return null; if(c.id)return document.getElementById(c.id); if(c.selectorHint){try{return document.querySelector(c.selectorHint)}catch{}} return null; }
 function mark(el:HTMLElement,kind:'ok'|'warn'|'fail'){const old=el.style.outline; el.style.outline=kind==='ok'?'3px solid #2e9d62':kind==='warn'?'3px solid #d97706':'3px solid #dc2626'; el.style.outlineOffset='2px'; setTimeout(()=>{el.style.outline=old;el.style.outlineOffset='';},3500);}
-export function scanPage(){return findFields();}
+export async function scanPage(){
+  const fieldsById=new Map<string,CyberPassField>();
+  await walkLazyRequirements(fields=>{for(const field of fields) fieldsById.set(field.requirementId,field);});
+  const fields=[...fieldsById.values()];
+  return {fields,debug:fields.map(field=>({requirementId:field.requirementId,text:field.containerText,controls:field.controls.map(({tag,type,name,id,ariaLabel})=>({tag,type,name,id,ariaLabel}))}))};
+}
 
 function wait(ms:number):Promise<void>{return new Promise(resolve=>setTimeout(resolve,ms));}
 function scrollTargets(): HTMLElement[] {
