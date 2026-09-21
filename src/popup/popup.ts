@@ -6,6 +6,11 @@ let requirements:ExcelRequirement[]=[]; let activeTab:any=null;
 const $=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T;
 const drop=$('dropZone'), input=$<HTMLInputElement>('fileInput'), dropPrompt=$('dropPrompt'), selectedFile=$('selectedFile'), selectedFileName=$('selectedFileName'), clearFile=$<HTMLButtonElement>('clearFile'), workbookCard=$('workbookCard'), fileName=$('fileName'), excelCount=$('excelCount'), status=$('status'), fillBtn=$<HTMLButtonElement>('fillBtn'), replace=$<HTMLInputElement>('replaceExisting'), overrideColour=$<HTMLInputElement>('overrideColour');
 (globalThis as any).XLSX=XLSX;
+function errorText(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  try { return JSON.stringify(error); } catch { return 'Unknown extension error'; }
+}
 function setStatus(message:string, kind?:'ok'|'error'){status.textContent=message;status.className=`status ${kind||''}`;}
 function setWorkbookUi(name:string|null): void {
   const hasFile=Boolean(name);
@@ -20,7 +25,7 @@ async function clearWorkbookForCurrentProcedure(): Promise<void> {
   const procedureId=procedureIdForUrl(activeTab?.url);
   if(!procedureId) throw new Error('Open the CyberPass vendor questionnaire URL before clearing the workbook.');
   await chromeApi.runtime.sendMessage({type:'CLEAR_WORKBOOK',procedureId});
-  await send({type:'INSTALL_HELPERS',requirements:[]}).catch(()=>{});
+  try { await send({type:'INSTALL_HELPERS',requirements:[]}); } catch(error) { setStatus(`Workbook cleared, but page helpers could not be removed: ${errorText(error)}`,'error'); }
   requirements=[];
   input.value='';
   setWorkbookUi(null);
@@ -43,15 +48,44 @@ function isAllowedTab(candidate:any): boolean {
     return url.origin==='https://app.fido.cyber-pass.org' && procedureIdForUrl(candidate.url)!==null && url.searchParams.get('step')==='fido_user_authenticator_vendor_questionnaire';
   } catch { return false; }
 }
-async function send(message:any){await tab();if(!isAllowedTab(activeTab)) throw new Error('Open the CyberPass vendor questionnaire URL before using the importer.');return chromeApi.tabs.sendMessage(activeTab.id,message);}
-async function sendWorker(message:any){return chromeApi.runtime.sendMessage(message);}
-async function load(file:File){let procedureId:string|null=null;try{await tab();if(!isAllowedTab(activeTab))throw new Error('Open the CyberPass vendor questionnaire URL before selecting a workbook.');procedureId=procedureIdForUrl(activeTab.url);if(!procedureId)throw new Error('Could not determine the CyberPass procedure ID.');if(/\.xlsb?$/.test(file.name.toLowerCase())) setStatus('Legacy .xls/.xlsb files need a full SheetJS build; use .xlsx or .xlsm for this bundled reader.','error');requirements=await readWorkbookFile(file);const response=await sendWorker({type:'STORE_WORKBOOK',procedureId,fileName:file.name,requirements});if(response?.error)throw new Error(response.error);fileName.textContent=file.name;setWorkbookUi(file.name);excelCount.textContent=String(requirements.length);fillBtn.disabled=!requirements.length;await send({type:'INSTALL_HELPERS',requirements}).catch(()=>{});setStatus(requirements.length?`Extracted ${requirements.length} requirement responses for procedure ${procedureId}.`:'No requirement rows detected.','ok');}catch(e){requirements=[];setWorkbookUi(null);if(procedureId)await sendWorker({type:'CLEAR_WORKBOOK',procedureId}).catch(()=>{});fillBtn.disabled=true;setStatus(String(e),'error');}}
+async function send(message:any){await tab();if(!isAllowedTab(activeTab)) throw new Error('Open the CyberPass vendor questionnaire URL before using the importer.');const response=await chromeApi.tabs.sendMessage(activeTab.id,message);if(response?.error)throw new Error(response.error);return response;}
+async function sendWorker(message:any){const response=await chromeApi.runtime.sendMessage(message);if(response?.error)throw new Error(response.error);return response;}
+async function load(file:File){
+  let procedureId:string|null=null;
+  try {
+    await tab();
+    if(!isAllowedTab(activeTab)) throw new Error('Open the CyberPass vendor questionnaire URL before selecting a workbook.');
+    procedureId=procedureIdForUrl(activeTab.url);
+    if(!procedureId) throw new Error('Could not determine the CyberPass procedure ID.');
+    if(/\.xlsb?$/.test(file.name.toLowerCase())) setStatus('Legacy .xls/.xlsb files need a full SheetJS build; use .xlsx or .xlsm for this bundled reader.','error');
+    const parsed=await readWorkbookFile(file);
+    if(!parsed.length) throw new Error('No requirement rows detected. Check that the workbook contains a populated SR No. and Vendor Response column.');
+    const response=await sendWorker({type:'STORE_WORKBOOK',procedureId,fileName:file.name,requirements:parsed});
+    if(response?.error) throw new Error(response.error);
+    requirements=parsed;
+    fileName.textContent=file.name;
+    setWorkbookUi(file.name);
+    excelCount.textContent=String(requirements.length);
+    fillBtn.disabled=false;
+    try {
+      await send({type:'INSTALL_HELPERS',requirements});
+      setStatus(`Loaded ${requirements.length} requirement responses for procedure ${procedureId}.`,'ok');
+    } catch(error) {
+      setStatus(`Workbook saved, but page helpers could not be installed: ${errorText(error)}`,'error');
+    }
+  } catch(error) {
+    requirements=[];
+    setWorkbookUi(null);
+    fillBtn.disabled=true;
+    setStatus(errorText(error),'error');
+  }
+}
 function confirmPageMovement(): boolean {
   return window.confirm('The CyberPass page will scroll while the extension loads dynamically rendered requirements. You will see the page moving. Continue?');
 }
-fillBtn.addEventListener('click',async()=>{if(!confirmPageMovement())return;try{const result=await send({type:'FILL',requirements,options:{replaceExisting:replace.checked}});setStatus(`Filled ${result.filled}; skipped ${result.skipped}; ${result.mismatches} mismatch warnings; ${result.failed} failed. The form was not submitted.`,result.failed?'error':'ok');}catch(e){setStatus(String(e),'error');}});
+fillBtn.addEventListener('click',async()=>{if(!confirmPageMovement())return;try{const result=await send({type:'FILL',requirements,options:{replaceExisting:replace.checked}});if(!result||typeof result.filled!=='number')throw new Error('The page did not return a valid fill result.');const detail=result.errors?.length?` ${result.errors.slice(0,3).join(' | ')}`:'';setStatus(`Filled ${result.filled}; skipped ${result.skipped}; ${result.mismatches} mismatch warnings; ${result.failed} failed.${detail}`,result.failed?'error':'ok');}catch(e){setStatus(errorText(e),'error');}});
 drop.addEventListener('click',()=>input.click());
-clearFile.addEventListener('click',async(event)=>{event.stopPropagation();try{await clearWorkbookForCurrentProcedure();}catch(error){setStatus(String(error),'error');}});input.addEventListener('change',()=>{const f=input.files?.[0];if(f)load(f)});for(const ev of ['dragenter','dragover'])drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('drag')});for(const ev of ['dragleave','drop'])drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('drag')});drop.addEventListener('drop',(e:any)=>{const f=e.dataTransfer.files?.[0];if(f)load(f)});overrideColour.addEventListener('change',async()=>{const enabled=overrideColour.checked;await chromeApi.storage.local.set({overrideRequirementColour:enabled});try{await send({type:'SET_DESCRIPTION_COLOR',enabled});setStatus(enabled?'Requirement descriptions are now black.':'Requirement colour override disabled.','ok');}catch(e){setStatus(String(e),'error');}});
+clearFile.addEventListener('click',async(event)=>{event.stopPropagation();try{await clearWorkbookForCurrentProcedure();}catch(error){setStatus(errorText(error),'error');}});input.addEventListener('change',()=>{const f=input.files?.[0];if(f)load(f)});for(const ev of ['dragenter','dragover'])drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('drag')});for(const ev of ['dragleave','drop'])drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('drag')});drop.addEventListener('drop',(e:any)=>{const f=e.dataTransfer.files?.[0];if(f)load(f)});overrideColour.addEventListener('change',async()=>{const enabled=overrideColour.checked;await chromeApi.storage.local.set({overrideRequirementColour:enabled});try{await send({type:'SET_DESCRIPTION_COLOR',enabled});setStatus(enabled?'Requirement descriptions are now black.':'Requirement colour override disabled.','ok');}catch(e){setStatus(errorText(e),'error');}});
 chromeApi.storage.local.get({overrideRequirementColour:false},(settings:any)=>{overrideColour.checked=Boolean(settings.overrideRequirementColour);});
 async function restoreWorkbookForProcedure(){
   await tab();
@@ -66,8 +100,8 @@ async function restoreWorkbookForProcedure(){
   setWorkbookUi(workbook.fileName||'Restored workbook');
   excelCount.textContent=String(requirements.length);
   fillBtn.disabled=false;
-  await send({type:'INSTALL_HELPERS',requirements}).catch(()=>{});
+  try { await send({type:'INSTALL_HELPERS',requirements}); } catch(error) { setStatus(`Workbook restored, but page helpers could not be installed: ${errorText(error)}`,'error'); return; }
   setStatus(`Restored ${requirements.length} requirement responses for procedure ${procedureId}.`, 'ok');
 }
 chromeApi.storage.local.remove(['workbookRequirements','workbookFileName']);
-(async()=>{try{await restoreWorkbookForProcedure();}catch{}})();
+(async()=>{try{await restoreWorkbookForProcedure();}catch(error){setStatus(`Could not restore this procedure's workbook: ${errorText(error)}`,'error');}})();

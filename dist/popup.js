@@ -215,6 +215,15 @@ var fillBtn = $("fillBtn");
 var replace = $("replaceExisting");
 var overrideColour = $("overrideColour");
 globalThis.XLSX = xlsx_default;
+function errorText(error) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return "Unknown extension error";
+  }
+}
 function setStatus(message, kind) {
   status.textContent = message;
   status.className = `status ${kind || ""}`;
@@ -232,8 +241,11 @@ async function clearWorkbookForCurrentProcedure() {
   const procedureId = procedureIdForUrl(activeTab?.url);
   if (!procedureId) throw new Error("Open the CyberPass vendor questionnaire URL before clearing the workbook.");
   await chromeApi.runtime.sendMessage({ type: "CLEAR_WORKBOOK", procedureId });
-  await send({ type: "INSTALL_HELPERS", requirements: [] }).catch(() => {
-  });
+  try {
+    await send({ type: "INSTALL_HELPERS", requirements: [] });
+  } catch (error) {
+    setStatus(`Workbook cleared, but page helpers could not be removed: ${errorText(error)}`, "error");
+  }
   requirements = [];
   input.value = "";
   setWorkbookUi(null);
@@ -267,10 +279,14 @@ function isAllowedTab(candidate) {
 async function send(message) {
   await tab();
   if (!isAllowedTab(activeTab)) throw new Error("Open the CyberPass vendor questionnaire URL before using the importer.");
-  return chromeApi.tabs.sendMessage(activeTab.id, message);
+  const response = await chromeApi.tabs.sendMessage(activeTab.id, message);
+  if (response?.error) throw new Error(response.error);
+  return response;
 }
 async function sendWorker(message) {
-  return chromeApi.runtime.sendMessage(message);
+  const response = await chromeApi.runtime.sendMessage(message);
+  if (response?.error) throw new Error(response.error);
+  return response;
 }
 async function load(file) {
   let procedureId = null;
@@ -280,23 +296,26 @@ async function load(file) {
     procedureId = procedureIdForUrl(activeTab.url);
     if (!procedureId) throw new Error("Could not determine the CyberPass procedure ID.");
     if (/\.xlsb?$/.test(file.name.toLowerCase())) setStatus("Legacy .xls/.xlsb files need a full SheetJS build; use .xlsx or .xlsm for this bundled reader.", "error");
-    requirements = await readWorkbookFile(file);
-    const response = await sendWorker({ type: "STORE_WORKBOOK", procedureId, fileName: file.name, requirements });
+    const parsed = await readWorkbookFile(file);
+    if (!parsed.length) throw new Error("No requirement rows detected. Check that the workbook contains a populated SR No. and Vendor Response column.");
+    const response = await sendWorker({ type: "STORE_WORKBOOK", procedureId, fileName: file.name, requirements: parsed });
     if (response?.error) throw new Error(response.error);
+    requirements = parsed;
     fileName.textContent = file.name;
     setWorkbookUi(file.name);
     excelCount.textContent = String(requirements.length);
-    fillBtn.disabled = !requirements.length;
-    await send({ type: "INSTALL_HELPERS", requirements }).catch(() => {
-    });
-    setStatus(requirements.length ? `Extracted ${requirements.length} requirement responses for procedure ${procedureId}.` : "No requirement rows detected.", "ok");
-  } catch (e) {
+    fillBtn.disabled = false;
+    try {
+      await send({ type: "INSTALL_HELPERS", requirements });
+      setStatus(`Loaded ${requirements.length} requirement responses for procedure ${procedureId}.`, "ok");
+    } catch (error) {
+      setStatus(`Workbook saved, but page helpers could not be installed: ${errorText(error)}`, "error");
+    }
+  } catch (error) {
     requirements = [];
     setWorkbookUi(null);
-    if (procedureId) await sendWorker({ type: "CLEAR_WORKBOOK", procedureId }).catch(() => {
-    });
     fillBtn.disabled = true;
-    setStatus(String(e), "error");
+    setStatus(errorText(error), "error");
   }
 }
 function confirmPageMovement() {
@@ -306,9 +325,11 @@ fillBtn.addEventListener("click", async () => {
   if (!confirmPageMovement()) return;
   try {
     const result = await send({ type: "FILL", requirements, options: { replaceExisting: replace.checked } });
-    setStatus(`Filled ${result.filled}; skipped ${result.skipped}; ${result.mismatches} mismatch warnings; ${result.failed} failed. The form was not submitted.`, result.failed ? "error" : "ok");
+    if (!result || typeof result.filled !== "number") throw new Error("The page did not return a valid fill result.");
+    const detail = result.errors?.length ? ` ${result.errors.slice(0, 3).join(" | ")}` : "";
+    setStatus(`Filled ${result.filled}; skipped ${result.skipped}; ${result.mismatches} mismatch warnings; ${result.failed} failed.${detail}`, result.failed ? "error" : "ok");
   } catch (e) {
-    setStatus(String(e), "error");
+    setStatus(errorText(e), "error");
   }
 });
 drop.addEventListener("click", () => input.click());
@@ -317,7 +338,7 @@ clearFile.addEventListener("click", async (event) => {
   try {
     await clearWorkbookForCurrentProcedure();
   } catch (error) {
-    setStatus(String(error), "error");
+    setStatus(errorText(error), "error");
   }
 });
 input.addEventListener("change", () => {
@@ -343,7 +364,7 @@ overrideColour.addEventListener("change", async () => {
     await send({ type: "SET_DESCRIPTION_COLOR", enabled });
     setStatus(enabled ? "Requirement descriptions are now black." : "Requirement colour override disabled.", "ok");
   } catch (e) {
-    setStatus(String(e), "error");
+    setStatus(errorText(e), "error");
   }
 });
 chromeApi.storage.local.get({ overrideRequirementColour: false }, (settings) => {
@@ -362,14 +383,19 @@ async function restoreWorkbookForProcedure() {
   setWorkbookUi(workbook.fileName || "Restored workbook");
   excelCount.textContent = String(requirements.length);
   fillBtn.disabled = false;
-  await send({ type: "INSTALL_HELPERS", requirements }).catch(() => {
-  });
+  try {
+    await send({ type: "INSTALL_HELPERS", requirements });
+  } catch (error) {
+    setStatus(`Workbook restored, but page helpers could not be installed: ${errorText(error)}`, "error");
+    return;
+  }
   setStatus(`Restored ${requirements.length} requirement responses for procedure ${procedureId}.`, "ok");
 }
 chromeApi.storage.local.remove(["workbookRequirements", "workbookFileName"]);
 (async () => {
   try {
     await restoreWorkbookForProcedure();
-  } catch {
+  } catch (error) {
+    setStatus(`Could not restore this procedure's workbook: ${errorText(error)}`, "error");
   }
 })();

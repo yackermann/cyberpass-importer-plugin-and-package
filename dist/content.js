@@ -334,7 +334,7 @@ if (!isCyberPassQuestionnairePage()) {
       installHelpers(workbook.requirements);
     }
   }
-  restoreSavedWorkbookHelpers().catch(() => void 0);
+  restoreSavedWorkbookHelpers().catch((error) => console.error("CyberPass workbook restore failed", error));
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     try {
       if (message.type === "SCAN_PAGE") scanPage().then(sendResponse).catch((error) => sendResponse({ error: String(error) }));
