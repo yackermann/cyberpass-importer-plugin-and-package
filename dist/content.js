@@ -210,19 +210,33 @@ function refreshHelpers() {
   for (const field of findFields().fields) {
     if (!helperRequirements.has(field.requirementId)) continue;
     const el = elementForField(field);
-    const parent = el?.parentElement;
-    if (!el || !parent || [...parent.children].some((child) => child instanceof HTMLElement && child.dataset.cyberpassHelperFor === field.requirementId)) continue;
+    const requirement = helperRequirements.get(field.requirementId);
+    if (!el || !requirement) continue;
+    if (el instanceof HTMLTextAreaElement && !el.dataset.cyberpassCommentAutofill) {
+      el.dataset.cyberpassCommentAutofill = "1";
+      el.addEventListener("click", () => {
+        if (!requirement.value) return;
+        const current = readValue(el);
+        if (current.trim() && current.trim() !== requirement.value.trim() && !confirm(`Requirement ${field.requirementId} already has a comment. Replace it with the Vendor Response from Excel?`)) return;
+        if (!current.trim() || current.trim() !== requirement.value.trim()) {
+          setNativeValue(el, requirement.value);
+          mark(el, "ok");
+        }
+      });
+    }
+    const parent = el.parentElement;
+    if (!parent || [...parent.children].some((child) => child instanceof HTMLElement && child.dataset.cyberpassHelperFor === field.requirementId)) continue;
     const btn = document.createElement("button");
     btn.type = "button";
     btn.textContent = "Fill from Excel";
     btn.dataset.cyberpassHelperFor = field.requirementId;
     btn.style.cssText = "margin:4px 0;padding:3px 7px;font:11px system-ui;cursor:pointer;background:#eef6ff;border:1px solid #6aa7df;border-radius:4px;";
     btn.addEventListener("click", () => {
-      const requirement = helperRequirements.get(field.requirementId);
-      if (!requirement?.value) return;
+      const requirement2 = helperRequirements.get(field.requirementId);
+      if (!requirement2?.value) return;
       const current = readValue(el);
-      if (current && current.trim() !== requirement.value.trim() && !confirm(`Requirement ${field.requirementId} already has content. Replace it?`)) return;
-      setNativeValue(el, requirement.value);
+      if (current && current.trim() !== requirement2.value.trim() && !confirm(`Requirement ${field.requirementId} already has content. Replace it?`)) return;
+      setNativeValue(el, requirement2.value);
       mark(el, "ok");
       btn.textContent = "Filled \u2713";
     });
