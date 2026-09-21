@@ -46,9 +46,8 @@ async function setAnswerChoice(field:CyberPassField, choice:'N/A'|'YES'|'NO'):Pr
   if(answer instanceof HTMLInputElement){
     answer.focus();
     answer.click();
-    setNativeValue(answer,choice);
-    await wait(50);
-    const option=[...document.querySelectorAll<HTMLElement>('[role="option"], .ant-select-item-option, .ant-select-item-option-content')].find(item=>normalizedAnswerLabel(item.textContent||'')===choice);
+    await wait(100);
+    const option=[...document.querySelectorAll<HTMLElement>('[role="option"], .ant-select-item-option')].find(item=>item.getClientRects().length>0 && normalizedAnswerLabel(item.textContent||'')===choice);
     if(!option)return false;
     option.click();
     mark(answer,'ok');
