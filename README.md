@@ -1,0 +1,39 @@
+# CyberPass Excel Importer
+
+A local-only Chrome/Edge Manifest V3 extension that restores the CyberPass vendor-questionnaire workflow: drop an Excel workbook, preview the requirement mapping, then fill the active assessment without submitting it.
+
+## Install
+
+1. Run `npm install` in this directory to install the declared SheetJS `xlsx` dependency for future adapter expansion. The checked-in fallback reader keeps this build reproducible offline; no runtime network access is used.
+2. Run `npm run build`.
+3. Open `chrome://extensions` (or `edge://extensions`), enable **Developer mode**, choose **Load unpacked**, and select this directory.
+4. Open a CyberPass assessment, click the extension, and drop a `.xlsx` or `.xlsm` workbook.
+
+The bundled fallback reader handles OOXML `.xlsx`/`.xlsm` files locally. Legacy `.xls`/`.xlsb` files are detected and reported so they are never silently misread; use `.xlsx`/`.xlsm` for this first build. The declared SheetJS dependency is ready for swapping in a full legacy-format adapter.
+
+## Workflow
+
+- **Scan page** inspects visible CyberPass requirement containers.
+- **Preview mapping** compares workbook values with the current page. Existing non-empty values that differ are shown as warnings and outlined in orange.
+- **Fill all** writes only empty fields by default. Enable **Replace existing values** to overwrite after reviewing the warnings.
+- Each mapped field also gets a small **Fill from Excel** helper button so individual fields can be filled one at a time. A confirmation is shown before replacing existing content.
+- The extension never clicks Submit, Save, Next, or any other workflow button.
+
+## Workbook mapping
+
+`src/excel/parser.ts` keeps extraction separate from the rest of the extension. It looks for a requirement column headed `SR No.`/`Requirement`, recognizes `SR001`, `SR 12`, `Requirement #12`, and dotted IDs such as `6.5`, and prefers a `Vendor Response`/`Response`/`Answer` column. The supplied FIDO workbook maps `FIDO Security Requirements!B:B` (SR No.) to `I:I` (Vendor Response).
+
+## Architecture
+
+- `src/excel/normalizer.ts` — shared requirement-ID normalization.
+- `src/excel/parser.ts` — SheetJS-compatible workbook extraction.
+- `src/content/cyberpass.ts` — generic CyberPass DOM adapter: scan, safe native-value filling, mismatch marking, and per-field helpers.
+- `src/content/content.ts` — message bridge.
+- `src/popup/*` — file drop, preview, controls, sanitized debug export.
+- `src/shared/*` — shared types and messages.
+
+## Debugging DOM detection
+
+Use **Export debug** after Preview mapping. The JSON contains requirement IDs, a short sanitized text sample, and control metadata (`tag`, `id`, `name`, `aria-label`) without field values, cookies, tokens, passwords, or unrelated page data. The content adapter currently recognizes `.input-node-view-builder-header` text such as `Requirement 6.5` and searches its nearest `.input-node-view-builder-container` for `textarea`, text inputs, selects, and contenteditable controls.
+
+To make matching deterministic, provide a saved DOM fragment for one or two representative requirements (including the requirement heading and its editable response control), plus whether the response should go into the answer select, comment textarea, or another control. A screenshot alone is useful for layout but does not reveal the control attributes needed for a deterministic adapter.

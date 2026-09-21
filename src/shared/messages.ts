@@ -1,0 +1,6 @@
+export type Message =
+  | { type: 'SCAN_PAGE' }
+  | { type: 'PREVIEW'; requirements: import('./types').ExcelRequirement[] }
+  | { type: 'FILL'; requirements: import('./types').ExcelRequirement[]; options: import('./types').FillOptions }
+  | { type: 'DEBUG_DOM' }
+  | { type: 'INSTALL_HELPERS'; requirements: import('./types').ExcelRequirement[] };
