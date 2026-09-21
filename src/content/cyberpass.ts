@@ -25,11 +25,18 @@ function answerElementForField(field:CyberPassField):HTMLElement|null {
 }
 function startsWithNotApplicable(value:string):boolean{return /^\s*n\/a\b/i.test(value);}
 function desiredAnswer(value:string):'N/A'|'YES'|'NO'{return startsWithNotApplicable(value)?'N/A':value.trim()?'YES':'NO';}
+function normalizedAnswerLabel(value:string):'N/A'|'YES'|'NO'|null {
+  const text=value.toLowerCase().replace(/[^a-z\/]+/g,' ').trim();
+  if(/^n\s*\/\s*a(?:\b|$)/.test(text))return 'N/A';
+  if(/^yes\b/.test(text))return 'YES';
+  if(/^no\b/.test(text))return 'NO';
+  return null;
+}
 async function setAnswerChoice(field:CyberPassField, choice:'N/A'|'YES'|'NO'):Promise<boolean> {
   const answer=answerElementForField(field);
   if(!answer)return false;
   if(answer instanceof HTMLSelectElement){
-    const option=[...answer.options].find(item=>item.text.trim().toLowerCase()===choice.toLowerCase());
+    const option=[...answer.options].find(item=>normalizedAnswerLabel(item.text)===choice);
     if(!option)return false;
     answer.value=option.value;
     answer.dispatchEvent(new Event('change',{bubbles:true}));
@@ -41,7 +48,7 @@ async function setAnswerChoice(field:CyberPassField, choice:'N/A'|'YES'|'NO'):Pr
     answer.click();
     setNativeValue(answer,choice);
     await wait(0);
-    const option=[...document.querySelectorAll<HTMLElement>('[role="option"], .ant-select-item-option-content')].find(item=>item.textContent?.trim().toLowerCase()===choice.toLowerCase());
+    const option=[...document.querySelectorAll<HTMLElement>('[role="option"], .ant-select-item-option, .ant-select-item-option-content')].find(item=>normalizedAnswerLabel(item.textContent||'')===choice);
     if(option)option.click();
     else answer.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',bubbles:true}));
     mark(answer,'ok');
