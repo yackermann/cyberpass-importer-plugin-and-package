@@ -324,6 +324,17 @@ function applyDescriptionColorOverride(enabled) {
 if (!isCyberPassQuestionnairePage()) {
 } else {
   chrome.storage.local.get({ overrideRequirementColour: false }, (settings) => applyDescriptionColorOverride(Boolean(settings.overrideRequirementColour)));
+  async function restoreSavedWorkbookHelpers() {
+    const match = location.pathname.match(/^\/procedures\/([^/]+)$/);
+    if (!match) return;
+    const procedureId = decodeURIComponent(match[1]);
+    const saved = await chrome.storage.session.get({ workbooksByProcedure: {} });
+    const workbook = saved.workbooksByProcedure?.[procedureId];
+    if (Array.isArray(workbook?.requirements) && workbook.requirements.length) {
+      installHelpers(workbook.requirements);
+    }
+  }
+  restoreSavedWorkbookHelpers().catch(() => void 0);
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     try {
       if (message.type === "SCAN_PAGE") scanPage().then(sendResponse).catch((error) => sendResponse({ error: String(error) }));

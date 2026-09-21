@@ -1,2 +1,10 @@
 // src/content/background.ts
-chrome.runtime.onInstalled.addListener(() => console.info("CyberPass Excel Importer ready"));
+function exposeSessionStorageToContentScripts() {
+  chrome.storage.session.setAccessLevel({ accessLevel: "TRUSTED_AND_UNTRUSTED_CONTEXTS" }).catch(() => void 0);
+}
+chrome.runtime.onInstalled.addListener(() => {
+  exposeSessionStorageToContentScripts();
+  console.info("CyberPass Excel Importer ready");
+});
+chrome.runtime.onStartup.addListener(exposeSessionStorageToContentScripts);
+exposeSessionStorageToContentScripts();

@@ -22,6 +22,17 @@ if (!isCyberPassQuestionnairePage()) {
   // behavior to the vendor-questionnaire step on those pages.
 } else {
   chrome.storage.local.get({ overrideRequirementColour: false }, (settings: any) => applyDescriptionColorOverride(Boolean(settings.overrideRequirementColour)));
+  async function restoreSavedWorkbookHelpers(): Promise<void> {
+    const match = location.pathname.match(/^\/procedures\/([^/]+)$/);
+    if (!match) return;
+    const procedureId = decodeURIComponent(match[1]);
+    const saved = await chrome.storage.session.get({ workbooksByProcedure: {} });
+    const workbook = saved.workbooksByProcedure?.[procedureId];
+    if (Array.isArray(workbook?.requirements) && workbook.requirements.length) {
+      installHelpers(workbook.requirements);
+    }
+  }
+  restoreSavedWorkbookHelpers().catch(() => undefined);
   chrome.runtime.onMessage.addListener((message: Message, _sender: any, sendResponse: any) => {
   try {
     if (message.type === 'SCAN_PAGE') scanPage().then(sendResponse).catch((error: unknown) => sendResponse({error: String(error)}));
