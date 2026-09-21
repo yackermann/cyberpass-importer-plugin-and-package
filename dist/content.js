@@ -96,6 +96,35 @@ function mark(el, kind) {
     el.style.outlineOffset = "";
   }, 3500);
 }
+function startsWithNotApplicable(value) {
+  return /^\s*N\/A(?:\s|$|[-:])/i.test(value);
+}
+function answerElementForField(field) {
+  const control = field.controls.find((item) => item.id?.toLowerCase().endsWith(".answer"));
+  return control?.id ? document.getElementById(control.id) : null;
+}
+function markNotApplicable(field) {
+  const answer = answerElementForField(field);
+  if (!answer) return false;
+  if (answer instanceof HTMLSelectElement) {
+    const option = [...answer.options].find((item) => /^\s*N\/A\b/i.test(item.text));
+    if (!option) return false;
+    answer.value = option.value;
+    answer.dispatchEvent(new Event("change", { bubbles: true }));
+    mark(answer, "ok");
+    return true;
+  }
+  if (answer instanceof HTMLInputElement) {
+    answer.focus();
+    answer.click();
+    setNativeValue(answer, "N/A");
+    const option = [...document.querySelectorAll('[role="option"], .ant-select-item-option-content')].find((item) => /^\s*N\/A\b/i.test(item.textContent || ""));
+    option?.click();
+    mark(answer, "ok");
+    return true;
+  }
+  return false;
+}
 async function scanPage() {
   const fieldsById = /* @__PURE__ */ new Map();
   await walkLazyRequirements((fields2) => {
@@ -140,6 +169,7 @@ async function walkLazyRequirements(onFields) {
   for (const [target, top] of positions) target.scrollTop = top;
 }
 function fillField(field, requirement, options, out) {
+  if (startsWithNotApplicable(requirement.value)) markNotApplicable(field);
   const el = elementForField(field);
   if (!el) {
     out.failed++;
@@ -235,6 +265,7 @@ function showCommentSuggestion(el, field, requirement) {
   fillButton.textContent = "Fill from Excel";
   fillButton.style.cssText = "display:block;margin-left:auto;border:0;border-radius:5px;padding:6px 9px;background:#246b9f;color:#fff;font:600 11px system-ui;cursor:pointer;";
   fillButton.addEventListener("click", () => {
+    if (startsWithNotApplicable(requirement.value)) markNotApplicable(field);
     setNativeValue(el, requirement.value);
     mark(el, "ok");
     hideCommentSuggestion();
@@ -259,6 +290,7 @@ function refreshHelpers() {
         else if (current.trim() !== requirement.value.trim()) {
           hideCommentSuggestion();
           if (confirm(`Requirement ${field.requirementId} already has a comment. Replace it with the Vendor Response from Excel?`)) {
+            if (startsWithNotApplicable(requirement.value)) markNotApplicable(field);
             setNativeValue(el, requirement.value);
             mark(el, "ok");
           }
@@ -277,6 +309,7 @@ function refreshHelpers() {
       if (!requirement?.value) return;
       const current = readValue(el);
       if (current && current.trim() !== requirement.value.trim() && !confirm(`Requirement ${field.requirementId} already has content. Replace it?`)) return;
+      if (startsWithNotApplicable(requirement.value)) markNotApplicable(field);
       setNativeValue(el, requirement.value);
       mark(el, "ok");
       btn.textContent = "Filled \u2713";
