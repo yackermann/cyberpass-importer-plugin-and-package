@@ -19,16 +19,17 @@ function findFields(): ScanResult {
 }
 function elementForField(field:CyberPassField):HTMLElement|null { const ordered=[...field.controls].sort((a,b)=>({textarea:0,contenteditable:1,select:2,input:3}[a.tag]??4)-({textarea:0,contenteditable:1,select:2,input:3}[b.tag]??4)); const c=ordered[0]; if(!c)return null; if(c.id)return document.getElementById(c.id); if(c.selectorHint){try{return document.querySelector(c.selectorHint)}catch{}} return null; }
 function mark(el:HTMLElement,kind:'ok'|'warn'|'fail'){const old=el.style.outline; el.style.outline=kind==='ok'?'3px solid #2e9d62':kind==='warn'?'3px solid #d97706':'3px solid #dc2626'; el.style.outlineOffset='2px'; setTimeout(()=>{el.style.outline=old;el.style.outlineOffset='';},3500);}
-function startsWithNotApplicable(value:string):boolean{return /^\s*n\/a\b/i.test(value);}
 function answerElementForField(field:CyberPassField):HTMLElement|null {
   const control=field.controls.find(item=>item.id?.toLowerCase().endsWith('.answer'));
   return control?.id?document.getElementById(control.id):null;
 }
-function markNotApplicable(field:CyberPassField):boolean {
+function startsWithNotApplicable(value:string):boolean{return /^\s*n\/a\b/i.test(value);}
+function desiredAnswer(value:string):'N/A'|'YES'|'NO'{return startsWithNotApplicable(value)?'N/A':value.trim()?'YES':'NO';}
+async function setAnswerChoice(field:CyberPassField, choice:'N/A'|'YES'|'NO'):Promise<boolean> {
   const answer=answerElementForField(field);
   if(!answer)return false;
   if(answer instanceof HTMLSelectElement){
-    const option=[...answer.options].find(item=>/^\s*n\/a\b/i.test(item.text));
+    const option=[...answer.options].find(item=>item.text.trim().toLowerCase()===choice.toLowerCase());
     if(!option)return false;
     answer.value=option.value;
     answer.dispatchEvent(new Event('change',{bubbles:true}));
@@ -38,9 +39,11 @@ function markNotApplicable(field:CyberPassField):boolean {
   if(answer instanceof HTMLInputElement){
     answer.focus();
     answer.click();
-    setNativeValue(answer,'N/A');
-    const option=[...document.querySelectorAll<HTMLElement>('[role="option"], .ant-select-item-option-content')].find(item=>/^\s*n\/a\b/i.test(item.textContent||''));
-    option?.click();
+    setNativeValue(answer,choice);
+    await wait(0);
+    const option=[...document.querySelectorAll<HTMLElement>('[role="option"], .ant-select-item-option-content')].find(item=>item.textContent?.trim().toLowerCase()===choice.toLowerCase());
+    if(option)option.click();
+    else answer.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',bubbles:true}));
     mark(answer,'ok');
     return true;
   }
@@ -67,12 +70,12 @@ function scrollTargets(): HTMLElement[] {
 }
 
 /** Walk lazy-loaded scroll regions until no new requirement containers appear. */
-async function walkLazyRequirements(onFields:(fields:CyberPassField[])=>void):Promise<void> {
+async function walkLazyRequirements(onFields:(fields:CyberPassField[])=>void|Promise<void>):Promise<void> {
   const positions=new Map<HTMLElement,number>();
   let stable=0;
   for(let pass=0;pass<40 && stable<2;pass++) {
     const before=findFields().fields;
-    onFields(before);
+    await onFields(before);
     const targets=scrollTargets();
     for(const target of targets) {
       if(!positions.has(target)) positions.set(target,target.scrollTop);
@@ -85,16 +88,28 @@ async function walkLazyRequirements(onFields:(fields:CyberPassField[])=>void):Pr
     const added=after.some(field=>!beforeIds.has(field.requirementId));
     stable=added?0:stable+1;
   }
-  onFields(findFields().fields);
+  await onFields(findFields().fields);
   for(const [target,top] of positions) target.scrollTop=top;
 }
 
-function fillField(field:CyberPassField, requirement:ExcelRequirement, options:FillOptions, out:FillResult):void {
-  if(startsWithNotApplicable(requirement.value)) markNotApplicable(field);
+async function fillField(field:CyberPassField, requirement:ExcelRequirement, options:FillOptions, out:FillResult):Promise<void> {
+  const choice=desiredAnswer(requirement.value);
+  const answer=answerElementForField(field);
+  if(answer){
+    const currentAnswer=readValue(answer).trim();
+    if(currentAnswer && currentAnswer.toLowerCase()!==choice.toLowerCase() && !options.replaceExisting){
+      out.mismatches++;
+      mark(answer,'warn');
+    } else if(!currentAnswer || options.replaceExisting) {
+      if(!(await setAnswerChoice(field,choice))) out.errors.push(`${field.requirementId}: could not set Response to ${choice}`);
+    }
+  } else {
+    out.errors.push(`${field.requirementId}: Response control not found`);
+  }
   const el=elementForField(field);
-  if(!el){out.failed++;out.errors.push(`${field.requirementId}: editable control not found`);return;}
-  const current=readValue(el);
+  if(!el){out.failed++;out.errors.push(`${field.requirementId}: editable comment control not found`);return;}
   if(!requirement.value){out.skipped++;return;}
+  const current=readValue(el);
   if(current.trim()&&!options.replaceExisting){
     if(current.trim()!==requirement.value.trim()){out.mismatches++;mark(el,'warn');}
     out.skipped++;return;
@@ -122,8 +137,8 @@ export async function fill(requirements:ExcelRequirement[],options:FillOptions):
   const byId=new Map(requirements.map(r=>[r.requirementId,r]));
   const processed=new Set<string>();
   const out:FillResult={filled:0,skipped:0,failed:0,mismatches:0,errors:[]};
-  await walkLazyRequirements(fields=>{
-    for(const field of fields){if(processed.has(field.requirementId))continue;const requirement=byId.get(field.requirementId);if(!requirement)continue;processed.add(field.requirementId);fillField(field,requirement,options,out);}
+  await walkLazyRequirements(async fields=>{
+    for(const field of fields){if(processed.has(field.requirementId))continue;const requirement=byId.get(field.requirementId);if(!requirement)continue;processed.add(field.requirementId);await fillField(field,requirement,options,out);}
   });
   return out;
 }
@@ -160,8 +175,8 @@ function showCommentSuggestion(el: HTMLTextAreaElement, field: CyberPassField, r
   fillButton.type = 'button';
   fillButton.textContent = 'Fill from Excel';
   fillButton.style.cssText = 'display:block;margin-left:auto;border:0;border-radius:5px;padding:6px 9px;background:#246b9f;color:#fff;font:600 11px system-ui;cursor:pointer;';
-  fillButton.addEventListener('click', () => {
-    if(startsWithNotApplicable(requirement.value)) markNotApplicable(field);
+  fillButton.addEventListener('click', async () => {
+    await setAnswerChoice(field,desiredAnswer(requirement.value));
     setNativeValue(el, requirement.value);
     mark(el, 'ok');
     hideCommentSuggestion();
@@ -180,7 +195,7 @@ export function refreshHelpers(): void {
     if (!el) continue;
     if (el instanceof HTMLTextAreaElement && !el.dataset.cyberpassCommentAutofill) {
       el.dataset.cyberpassCommentAutofill = '1';
-      el.addEventListener('click', () => {
+      el.addEventListener('click', async () => {
         const requirement = helperRequirements.get(field.requirementId);
         if (!requirement?.value) return;
         const current = readValue(el);
@@ -188,7 +203,7 @@ export function refreshHelpers(): void {
         else if (current.trim() !== requirement.value.trim()) {
           hideCommentSuggestion();
           if (confirm(`Requirement ${field.requirementId} already has a comment. Replace it with the Vendor Response from Excel?`)) {
-            if(startsWithNotApplicable(requirement.value)) markNotApplicable(field);
+            await setAnswerChoice(field,desiredAnswer(requirement.value));
             setNativeValue(el, requirement.value);
             mark(el, 'ok');
           }
@@ -203,16 +218,15 @@ export function refreshHelpers(): void {
     btn.textContent = 'Fill from Excel';
     btn.dataset.cyberpassHelperFor = field.requirementId;
     btn.style.cssText = 'display:block;margin:4px 0 4px auto;padding:3px 7px;font:11px system-ui;cursor:pointer;background:#eef6ff;border:1px solid #6aa7df;border-radius:4px;';
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const requirement = helperRequirements.get(field.requirementId);
-      if (!requirement?.value) return;
+      if (!requirement) return;
       const current = readValue(el);
-      if (current && current.trim() !== requirement.value.trim() &&
+      if (requirement.value && current && current.trim() !== requirement.value.trim() &&
           !confirm(`Requirement ${field.requirementId} already has content. Replace it?`)) return;
-      if(startsWithNotApplicable(requirement.value)) markNotApplicable(field);
-      setNativeValue(el, requirement.value);
-      mark(el, 'ok');
-      btn.textContent = 'Filled ✓';
+      await setAnswerChoice(field,desiredAnswer(requirement.value));
+      if (requirement.value) { setNativeValue(el, requirement.value); mark(el, 'ok'); }
+      btn.textContent = requirement.value ? 'Filled ✓' : 'Marked NO ✓';
     });
     parent.insertBefore(btn, el);
   }
