@@ -38,3 +38,9 @@ The bundled fallback reader handles OOXML `.xlsx`/`.xlsm` files locally. Legacy 
 Use **Export debug** after Preview mapping. The JSON contains requirement IDs, a short sanitized text sample, and control metadata (`tag`, `id`, `name`, `aria-label`) without field values, cookies, tokens, passwords, or unrelated page data. The content adapter currently recognizes `.input-node-view-builder-header` text such as `Requirement 6.5` and searches its nearest `.input-node-view-builder-container` for `textarea`, text inputs, selects, and contenteditable controls.
 
 To make matching deterministic, provide a saved DOM fragment for one or two representative requirements (including the requirement heading and its editable response control), plus whether the response should go into the answer select, comment textarea, or another control. A screenshot alone is useful for layout but does not reveal the control attributes needed for a deterministic adapter.
+
+## Attribution and trademark notice
+
+Made by **Yuriy Ackermann**.
+
+FIDO, FIDO Alliance, CyberPass, and any related names, marks, or logos are trademarks of their respective owners. This project is an independent, unofficial tool. It is not sponsored, endorsed, administered by, or affiliated with FIDO Alliance, CyberPass, or their respective owners. No ownership of those trademarks is claimed by this project or its author.
