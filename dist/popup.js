@@ -204,6 +204,10 @@ var activeTab = null;
 var $ = (id) => document.getElementById(id);
 var drop = $("dropZone");
 var input = $("fileInput");
+var dropPrompt = $("dropPrompt");
+var selectedFile = $("selectedFile");
+var selectedFileName = $("selectedFileName");
+var clearFile = $("clearFile");
 var fileName = $("fileName");
 var excelCount = $("excelCount");
 var pageCount = $("pageCount");
@@ -221,6 +225,32 @@ globalThis.XLSX = xlsx_default;
 function setStatus(message, kind) {
   status.textContent = message;
   status.className = `status ${kind || ""}`;
+}
+function setWorkbookUi(name) {
+  const hasFile = Boolean(name);
+  drop.classList.toggle("has-file", hasFile);
+  dropPrompt.classList.toggle("hidden", hasFile);
+  selectedFile.classList.toggle("hidden", !hasFile);
+  if (hasFile) selectedFileName.textContent = name;
+}
+async function clearWorkbookForCurrentProcedure() {
+  await tab();
+  const procedureId = procedureIdForUrl(activeTab?.url);
+  if (!procedureId) throw new Error("Open the CyberPass vendor questionnaire URL before clearing the workbook.");
+  const saved = await chromeApi.storage.session.get({ workbooksByProcedure: {} });
+  const workbooksByProcedure = { ...saved.workbooksByProcedure || {} };
+  delete workbooksByProcedure[procedureId];
+  await chromeApi.storage.session.set({ workbooksByProcedure });
+  requirements = [];
+  input.value = "";
+  setWorkbookUi(null);
+  fileName.textContent = "No file selected";
+  excelCount.textContent = "\u2014";
+  previewBtn.disabled = true;
+  fillBtn.disabled = true;
+  preview.classList.add("hidden");
+  summary.classList.add("hidden");
+  setStatus("Workbook cleared for this procedure.", "ok");
 }
 async function tab() {
   const tabs = await chromeApi.tabs.query({ active: true, currentWindow: true });
@@ -263,12 +293,14 @@ async function load(file) {
     workbooksByProcedure[procedureId] = { fileName: file.name, requirements };
     await chromeApi.storage.session.set({ workbooksByProcedure });
     fileName.textContent = file.name;
+    setWorkbookUi(file.name);
     excelCount.textContent = String(requirements.length);
     previewBtn.disabled = !requirements.length;
     fillBtn.disabled = !requirements.length;
     setStatus(requirements.length ? `Extracted ${requirements.length} requirement responses for procedure ${procedureId}.` : "No requirement rows detected.", "ok");
   } catch (e) {
     requirements = [];
+    setWorkbookUi(null);
     if (procedureId) {
       const saved = await chromeApi.storage.session.get({ workbooksByProcedure: {} });
       const workbooksByProcedure = { ...saved.workbooksByProcedure || {} };
@@ -353,6 +385,14 @@ exportBtn.addEventListener("click", () => {
   setStatus("Sanitized debug information exported locally.", "ok");
 });
 drop.addEventListener("click", () => input.click());
+clearFile.addEventListener("click", async (event) => {
+  event.stopPropagation();
+  try {
+    await clearWorkbookForCurrentProcedure();
+  } catch (error) {
+    setStatus(String(error), "error");
+  }
+});
 input.addEventListener("change", () => {
   const f = input.files?.[0];
   if (f) load(f);
@@ -392,6 +432,7 @@ async function restoreWorkbookForProcedure() {
   if (!workbook || !Array.isArray(workbook.requirements) || !workbook.requirements.length) return;
   requirements = workbook.requirements;
   fileName.textContent = workbook.fileName || "Restored workbook";
+  setWorkbookUi(workbook.fileName || "Restored workbook");
   excelCount.textContent = String(requirements.length);
   previewBtn.disabled = false;
   fillBtn.disabled = false;
