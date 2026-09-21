@@ -227,10 +227,19 @@ async function tab() {
   activeTab = tabs[0];
   return activeTab;
 }
+function procedureIdForUrl(rawUrl) {
+  try {
+    const url = new URL(rawUrl || "");
+    const match = url.pathname.match(/^\/procedures\/([^/]+)$/);
+    return match ? decodeURIComponent(match[1]) : null;
+  } catch {
+    return null;
+  }
+}
 function isAllowedTab(candidate) {
   try {
     const url = new URL(candidate?.url || "");
-    return url.origin === "https://app.fido.cyber-pass.org" && /^\/procedures\/[^/]+$/.test(url.pathname) && url.searchParams.get("step") === "fido_user_authenticator_vendor_questionnaire";
+    return url.origin === "https://app.fido.cyber-pass.org" && procedureIdForUrl(candidate.url) !== null && url.searchParams.get("step") === "fido_user_authenticator_vendor_questionnaire";
   } catch {
     return false;
   }
@@ -241,18 +250,31 @@ async function send(message) {
   return chromeApi.tabs.sendMessage(activeTab.id, message);
 }
 async function load(file) {
+  let procedureId = null;
   try {
+    await tab();
+    if (!isAllowedTab(activeTab)) throw new Error("Open the CyberPass vendor questionnaire URL before selecting a workbook.");
+    procedureId = procedureIdForUrl(activeTab.url);
+    if (!procedureId) throw new Error("Could not determine the CyberPass procedure ID.");
     if (/\.xlsb?$/.test(file.name.toLowerCase())) setStatus("Legacy .xls/.xlsb files need a full SheetJS build; use .xlsx or .xlsm for this bundled reader.", "error");
     requirements = await readWorkbookFile(file);
-    await chromeApi.storage.local.set({ workbookRequirements: requirements, workbookFileName: file.name });
+    const saved = await chromeApi.storage.session.get({ workbooksByProcedure: {} });
+    const workbooksByProcedure = { ...saved.workbooksByProcedure || {} };
+    workbooksByProcedure[procedureId] = { fileName: file.name, requirements };
+    await chromeApi.storage.session.set({ workbooksByProcedure });
     fileName.textContent = file.name;
     excelCount.textContent = String(requirements.length);
     previewBtn.disabled = !requirements.length;
     fillBtn.disabled = !requirements.length;
-    setStatus(requirements.length ? `Extracted ${requirements.length} requirement responses locally. Review the mapping before filling.` : "No requirement rows detected.", "ok");
+    setStatus(requirements.length ? `Extracted ${requirements.length} requirement responses for procedure ${procedureId}.` : "No requirement rows detected.", "ok");
   } catch (e) {
     requirements = [];
-    await chromeApi.storage.local.remove(["workbookRequirements", "workbookFileName"]);
+    if (procedureId) {
+      const saved = await chromeApi.storage.session.get({ workbooksByProcedure: {} });
+      const workbooksByProcedure = { ...saved.workbooksByProcedure || {} };
+      delete workbooksByProcedure[procedureId];
+      await chromeApi.storage.session.set({ workbooksByProcedure });
+    }
     previewBtn.disabled = true;
     fillBtn.disabled = true;
     setStatus(String(e), "error");
@@ -354,14 +376,25 @@ overrideColour.addEventListener("change", async () => {
 chromeApi.storage.local.get({ overrideRequirementColour: false }, (settings) => {
   overrideColour.checked = Boolean(settings.overrideRequirementColour);
 });
-chromeApi.storage.local.get({ workbookRequirements: [], workbookFileName: "" }, (saved) => {
-  if (!Array.isArray(saved.workbookRequirements) || !saved.workbookRequirements.length) return;
-  requirements = saved.workbookRequirements;
-  fileName.textContent = saved.workbookFileName || "Restored workbook";
+async function restoreWorkbookForProcedure() {
+  await tab();
+  if (!isAllowedTab(activeTab)) return;
+  const procedureId = procedureIdForUrl(activeTab.url);
+  if (!procedureId) return;
+  const saved = await chromeApi.storage.session.get({ workbooksByProcedure: {} });
+  const workbook = saved.workbooksByProcedure?.[procedureId];
+  if (!workbook || !Array.isArray(workbook.requirements) || !workbook.requirements.length) return;
+  requirements = workbook.requirements;
+  fileName.textContent = workbook.fileName || "Restored workbook";
   excelCount.textContent = String(requirements.length);
   previewBtn.disabled = false;
   fillBtn.disabled = false;
-  setStatus(`Restored ${requirements.length} requirement responses from local storage.`, "ok");
-});
-tab().catch(() => {
-});
+  setStatus(`Restored ${requirements.length} requirement responses for procedure ${procedureId}.`, "ok");
+}
+chromeApi.storage.local.remove(["workbookRequirements", "workbookFileName"]);
+(async () => {
+  try {
+    await restoreWorkbookForProcedure();
+  } catch {
+  }
+})();
