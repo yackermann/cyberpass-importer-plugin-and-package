@@ -17,6 +17,7 @@ The bundled fallback reader handles OOXML `.xlsx`/`.xlsm` files locally. Legacy 
 - **Preview mapping** compares workbook values with the current page. Existing non-empty values that differ are shown as warnings and outlined in orange.
 - **Fill all** writes only empty fields by default. Enable **Replace existing values** to overwrite after reviewing the warnings.
 - **Override requirement colour** applies a local, page-scoped style that makes `.input-node-view-builder-description` text black. The setting is saved locally and reapplied on page reload.
+- Parsed workbook requirements are saved in extension-local storage, so closing the popup does not discard the selected workbook mapping.
 - Each mapped field also gets a small **Fill from Excel** helper button so individual fields can be filled one at a time. A confirmation is shown before replacing existing content.
 - The extension never clicks Submit, Save, Next, or any other workflow button.
 

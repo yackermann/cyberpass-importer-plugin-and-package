@@ -244,6 +244,7 @@ async function load(file) {
   try {
     if (/\.xlsb?$/.test(file.name.toLowerCase())) setStatus("Legacy .xls/.xlsb files need a full SheetJS build; use .xlsx or .xlsm for this bundled reader.", "error");
     requirements = await readWorkbookFile(file);
+    await chromeApi.storage.local.set({ workbookRequirements: requirements, workbookFileName: file.name });
     fileName.textContent = file.name;
     excelCount.textContent = String(requirements.length);
     previewBtn.disabled = !requirements.length;
@@ -251,6 +252,7 @@ async function load(file) {
     setStatus(requirements.length ? `Extracted ${requirements.length} requirement responses locally. Review the mapping before filling.` : "No requirement rows detected.", "ok");
   } catch (e) {
     requirements = [];
+    await chromeApi.storage.local.remove(["workbookRequirements", "workbookFileName"]);
     previewBtn.disabled = true;
     fillBtn.disabled = true;
     setStatus(String(e), "error");
@@ -351,6 +353,15 @@ overrideColour.addEventListener("change", async () => {
 });
 chromeApi.storage.local.get({ overrideRequirementColour: false }, (settings) => {
   overrideColour.checked = Boolean(settings.overrideRequirementColour);
+});
+chromeApi.storage.local.get({ workbookRequirements: [], workbookFileName: "" }, (saved) => {
+  if (!Array.isArray(saved.workbookRequirements) || !saved.workbookRequirements.length) return;
+  requirements = saved.workbookRequirements;
+  fileName.textContent = saved.workbookFileName || "Restored workbook";
+  excelCount.textContent = String(requirements.length);
+  previewBtn.disabled = false;
+  fillBtn.disabled = false;
+  setStatus(`Restored ${requirements.length} requirement responses from local storage.`, "ok");
 });
 tab().catch(() => {
 });
