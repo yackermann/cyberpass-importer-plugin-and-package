@@ -3,4 +3,5 @@ export type Message =
   | { type: 'PREVIEW'; requirements: import('./types').ExcelRequirement[] }
   | { type: 'FILL'; requirements: import('./types').ExcelRequirement[]; options: import('./types').FillOptions }
   | { type: 'DEBUG_DOM' }
-  | { type: 'INSTALL_HELPERS'; requirements: import('./types').ExcelRequirement[] };
+  | { type: 'INSTALL_HELPERS'; requirements: import('./types').ExcelRequirement[] }
+  | { type: 'SET_DESCRIPTION_COLOR'; enabled: boolean };

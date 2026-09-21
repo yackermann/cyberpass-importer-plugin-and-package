@@ -212,6 +212,7 @@ var scanBtn = $("scanBtn");
 var previewBtn = $("previewBtn");
 var fillBtn = $("fillBtn");
 var replace = $("replaceExisting");
+var overrideColour = $("overrideColour");
 var preview = $("preview");
 var previewRows = $("previewRows");
 var summary = $("summary");
@@ -337,6 +338,19 @@ for (const ev of ["dragleave", "drop"]) drop.addEventListener(ev, (e) => {
 drop.addEventListener("drop", (e) => {
   const f = e.dataTransfer.files?.[0];
   if (f) load(f);
+});
+overrideColour.addEventListener("change", async () => {
+  const enabled = overrideColour.checked;
+  await chromeApi.storage.local.set({ overrideRequirementColour: enabled });
+  try {
+    await send({ type: "SET_DESCRIPTION_COLOR", enabled });
+    setStatus(enabled ? "Requirement descriptions are now black." : "Requirement colour override disabled.", "ok");
+  } catch (e) {
+    setStatus(String(e), "error");
+  }
+});
+chromeApi.storage.local.get({ overrideRequirementColour: false }, (settings) => {
+  overrideColour.checked = Boolean(settings.overrideRequirementColour);
 });
 tab().catch(() => {
 });

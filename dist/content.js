@@ -187,19 +187,34 @@ function isCyberPassQuestionnairePage() {
   if (!/^\/procedures\/[^/]+$/.test(location.pathname)) return false;
   return new URLSearchParams(location.search).get("step") === "fido_user_authenticator_vendor_questionnaire";
 }
+function applyDescriptionColorOverride(enabled) {
+  const styleId = "cyberpass-importer-description-color";
+  document.getElementById(styleId)?.remove();
+  if (!enabled) return;
+  const style = document.createElement("style");
+  style.id = styleId;
+  style.textContent = ".input-node-view-builder-description, .input-node-view-builder-description * { color: #000 !important; }";
+  document.documentElement.appendChild(style);
+}
 if (!isCyberPassQuestionnairePage()) {
-} else chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  try {
-    if (message.type === "SCAN_PAGE") sendResponse(scanPage());
-    else if (message.type === "PREVIEW") sendResponse(preview(message.requirements));
-    else if (message.type === "FILL") sendResponse(fill(message.requirements, message.options));
-    else if (message.type === "DEBUG_DOM") sendResponse(debugDom());
-    else if (message.type === "INSTALL_HELPERS") {
-      installHelpers(message.requirements);
-      sendResponse({ ok: true });
+} else {
+  chrome.storage.local.get({ overrideRequirementColour: false }, (settings) => applyDescriptionColorOverride(Boolean(settings.overrideRequirementColour)));
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    try {
+      if (message.type === "SCAN_PAGE") sendResponse(scanPage());
+      else if (message.type === "PREVIEW") sendResponse(preview(message.requirements));
+      else if (message.type === "FILL") sendResponse(fill(message.requirements, message.options));
+      else if (message.type === "DEBUG_DOM") sendResponse(debugDom());
+      else if (message.type === "INSTALL_HELPERS") {
+        installHelpers(message.requirements);
+        sendResponse({ ok: true });
+      } else if (message.type === "SET_DESCRIPTION_COLOR") {
+        applyDescriptionColorOverride(message.enabled);
+        sendResponse({ ok: true });
+      }
+    } catch (error) {
+      sendResponse({ error: String(error) });
     }
-  } catch (error) {
-    sendResponse({ error: String(error) });
-  }
-  return true;
-});
+    return true;
+  });
+}
