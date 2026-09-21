@@ -182,7 +182,13 @@ function debugDom() {
 }
 
 // src/content/content.ts
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+function isCyberPassQuestionnairePage() {
+  if (location.origin !== "https://app.fido.cyber-pass.org") return false;
+  if (!/^\/procedures\/[^/]+$/.test(location.pathname)) return false;
+  return new URLSearchParams(location.search).get("step") === "fido_user_authenticator_vendor_questionnaire";
+}
+if (!isCyberPassQuestionnairePage()) {
+} else chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   try {
     if (message.type === "SCAN_PAGE") sendResponse(scanPage());
     else if (message.type === "PREVIEW") sendResponse(preview(message.requirements));

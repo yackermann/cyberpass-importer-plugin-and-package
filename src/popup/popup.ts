@@ -8,7 +8,13 @@ const drop=$('dropZone'), input=$<HTMLInputElement>('fileInput'), fileName=$('fi
 (globalThis as any).XLSX=XLSX;
 function setStatus(message:string, kind?:'ok'|'error'){status.textContent=message;status.className=`status ${kind||''}`;}
 async function tab(){const tabs=await chromeApi.tabs.query({active:true,currentWindow:true});activeTab=tabs[0];return activeTab;}
-async function send(message:any){await tab();return chromeApi.tabs.sendMessage(activeTab.id,message);}
+function isAllowedTab(candidate:any): boolean {
+  try {
+    const url=new URL(candidate?.url||'');
+    return url.origin==='https://app.fido.cyber-pass.org' && /^\/procedures\/[^/]+$/.test(url.pathname) && url.searchParams.get('step')==='fido_user_authenticator_vendor_questionnaire';
+  } catch { return false; }
+}
+async function send(message:any){await tab();if(!isAllowedTab(activeTab)) throw new Error('Open the CyberPass vendor questionnaire URL before using the importer.');return chromeApi.tabs.sendMessage(activeTab.id,message);}
 async function load(file:File){try{if(/\.xlsb?$/.test(file.name.toLowerCase())) setStatus('Legacy .xls/.xlsb files need a full SheetJS build; use .xlsx or .xlsm for this bundled reader.','error'); requirements=await readWorkbookFile(file);fileName.textContent=file.name;excelCount.textContent=String(requirements.length);previewBtn.disabled=!requirements.length;fillBtn.disabled=!requirements.length;setStatus(requirements.length?`Extracted ${requirements.length} requirement responses locally. Review the mapping before filling.`:'No requirement rows detected.','ok');}catch(e){requirements=[];previewBtn.disabled=true;fillBtn.disabled=true;setStatus(String(e),'error');}}
 function renderRows(rows:MappingRow[]){previewRows.innerHTML='';for(const row of rows.slice(0,120)){const d=document.createElement('div');d.className='mapping-row';const value=row.excel?.value||row.currentValue||'—';const label=row.status==='matched'?'ready':row.status==='mismatch'?'warning':row.status.includes('unmatched')?'unmatched':row.status;const cls=row.status==='mismatch'?'warn':row.status.includes('unmatched')?'bad':'';d.innerHTML=`<span class="rid">${row.requirementId}</span><span class="val" title="${escapeHtml(value)}">${escapeHtml(value)}</span><span class="pill ${cls}">${label}</span>`;previewRows.appendChild(d);}if(rows.length>120){const more=document.createElement('div');more.style.cssText='font-size:10px;color:#778; padding:5px';more.textContent=`Showing 120 of ${rows.length} rows`;previewRows.appendChild(more);}}
 function escapeHtml(value:string){return value.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]||c));}

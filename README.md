@@ -1,13 +1,13 @@
 # CyberPass Excel Importer
 
-A local-only Chrome/Edge Manifest V3 extension that restores the CyberPass vendor-questionnaire workflow: drop an Excel workbook, preview the requirement mapping, then fill the active assessment without submitting it.
+A local-only Chrome/Edge Manifest V3 extension that restores the CyberPass vendor-questionnaire workflow on `https://app.fido.cyber-pass.org/procedures/{id}?step=fido_user_authenticator_vendor_questionnaire`: drop an Excel workbook, preview the requirement mapping, then fill the active assessment without submitting it.
 
 ## Install
 
 1. Run `npm install` in this directory to install the declared SheetJS `xlsx` dependency for future adapter expansion. The checked-in fallback reader keeps this build reproducible offline; no runtime network access is used.
 2. Run `npm run build`.
 3. Open `chrome://extensions` (or `edge://extensions`), enable **Developer mode**, choose **Load unpacked**, and select this directory.
-4. Open a CyberPass assessment, click the extension, and drop a `.xlsx` or `.xlsm` workbook.
+4. Open a CyberPass assessment at the vendor-questionnaire step, click the extension, and drop a `.xlsx` or `.xlsm` workbook. The extension is inactive on all other sites and procedure steps.
 
 The bundled fallback reader handles OOXML `.xlsx`/`.xlsm` files locally. Legacy `.xls`/`.xlsb` files are detected and reported so they are never silently misread; use `.xlsx`/`.xlsm` for this first build. The declared SheetJS dependency is ready for swapping in a full legacy-format adapter.
 

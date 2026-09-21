@@ -226,8 +226,17 @@ async function tab() {
   activeTab = tabs[0];
   return activeTab;
 }
+function isAllowedTab(candidate) {
+  try {
+    const url = new URL(candidate?.url || "");
+    return url.origin === "https://app.fido.cyber-pass.org" && /^\/procedures\/[^/]+$/.test(url.pathname) && url.searchParams.get("step") === "fido_user_authenticator_vendor_questionnaire";
+  } catch {
+    return false;
+  }
+}
 async function send(message) {
   await tab();
+  if (!isAllowedTab(activeTab)) throw new Error("Open the CyberPass vendor questionnaire URL before using the importer.");
   return chromeApi.tabs.sendMessage(activeTab.id, message);
 }
 async function load(file) {

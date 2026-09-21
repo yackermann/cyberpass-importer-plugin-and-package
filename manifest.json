@@ -3,10 +3,41 @@
   "name": "CyberPass Excel Importer",
   "version": "0.1.0",
   "description": "Import CyberPass vendor questionnaire responses from a local Excel workbook.",
-  "action": { "default_title": "CyberPass Excel Importer", "default_popup": "popup.html" },
-  "permissions": ["activeTab", "scripting", "storage"],
-  "host_permissions": ["<all_urls>"],
-  "background": { "service_worker": "dist/background.js", "type": "module" },
-  "content_scripts": [{ "matches": ["<all_urls>"], "js": ["dist/content.js"], "run_at": "document_idle" }],
-  "web_accessible_resources": [{ "resources": ["dist/*"], "matches": ["<all_urls>"] }]
+  "action": {
+    "default_title": "CyberPass Excel Importer",
+    "default_popup": "popup.html"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://app.fido.cyber-pass.org/procedures/*"
+  ],
+  "background": {
+    "service_worker": "dist/background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://app.fido.cyber-pass.org/procedures/*"
+      ],
+      "js": [
+        "dist/content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "dist/*"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
 }
