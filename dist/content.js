@@ -206,6 +206,44 @@ async function fill(requirements, options) {
 var helperRequirements = /* @__PURE__ */ new Map();
 var dynamicObserver = null;
 var refreshTimer;
+var commentSuggestion = null;
+var commentSuggestionAnchor = null;
+function hideCommentSuggestion() {
+  commentSuggestion?.remove();
+  commentSuggestion = null;
+  commentSuggestionAnchor = null;
+}
+function showCommentSuggestion(el, field, requirement) {
+  hideCommentSuggestion();
+  if (!requirement.value || !document.body) return;
+  const card = document.createElement("div");
+  card.setAttribute("role", "dialog");
+  card.setAttribute("aria-label", "Excel autofill suggestion");
+  card.style.cssText = "position:fixed;z-index:2147483646;width:300px;max-width:calc(100vw - 24px);padding:10px;background:#fff;border:1px solid #b8c9d8;border-radius:8px;box-shadow:0 5px 18px rgba(31,52,70,.18);font:12px system-ui;color:#243746;";
+  const rect = el.getBoundingClientRect();
+  card.style.left = `${Math.max(12, Math.min(rect.left, window.innerWidth - 312))}px`;
+  card.style.top = `${Math.min(window.innerHeight - 100, rect.bottom + 6)}px`;
+  const heading = document.createElement("div");
+  heading.textContent = `Requirement ${field.requirementId} \xB7 Vendor Response`;
+  heading.style.cssText = "font-weight:700;margin-bottom:5px;";
+  const value = document.createElement("div");
+  value.textContent = requirement.value;
+  value.title = requirement.value;
+  value.style.cssText = "color:#5d6b77;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:8px;";
+  const fillButton = document.createElement("button");
+  fillButton.type = "button";
+  fillButton.textContent = "Fill from Excel";
+  fillButton.style.cssText = "border:0;border-radius:5px;padding:6px 9px;background:#246b9f;color:#fff;font:600 11px system-ui;cursor:pointer;";
+  fillButton.addEventListener("click", () => {
+    setNativeValue(el, requirement.value);
+    mark(el, "ok");
+    hideCommentSuggestion();
+  });
+  card.append(heading, value, fillButton);
+  document.body.appendChild(card);
+  commentSuggestion = card;
+  commentSuggestionAnchor = el;
+}
 function refreshHelpers() {
   for (const field of findFields().fields) {
     if (!helperRequirements.has(field.requirementId)) continue;
@@ -217,10 +255,13 @@ function refreshHelpers() {
       el.addEventListener("click", () => {
         if (!requirement.value) return;
         const current = readValue(el);
-        if (current.trim() && current.trim() !== requirement.value.trim() && !confirm(`Requirement ${field.requirementId} already has a comment. Replace it with the Vendor Response from Excel?`)) return;
-        if (!current.trim() || current.trim() !== requirement.value.trim()) {
-          setNativeValue(el, requirement.value);
-          mark(el, "ok");
+        if (!current.trim()) showCommentSuggestion(el, field, requirement);
+        else if (current.trim() !== requirement.value.trim()) {
+          hideCommentSuggestion();
+          if (confirm(`Requirement ${field.requirementId} already has a comment. Replace it with the Vendor Response from Excel?`)) {
+            setNativeValue(el, requirement.value);
+            mark(el, "ok");
+          }
         }
       });
     }
@@ -254,7 +295,11 @@ function installHelpers(requirements) {
     };
     dynamicObserver = new MutationObserver(scheduleRefresh);
     dynamicObserver.observe(document.body, { childList: true, subtree: true });
-    window.addEventListener("scroll", scheduleRefresh, { passive: true });
+    document.addEventListener("click", (event) => {
+      const target = event.target;
+      if (commentSuggestion && target && target !== commentSuggestionAnchor && !commentSuggestion.contains(target)) hideCommentSuggestion();
+    });
+    window.addEventListener("scroll", () => hideCommentSuggestion(), { passive: true });
   }
 }
 function debugDom() {

@@ -19,7 +19,7 @@ The bundled fallback reader handles OOXML `.xlsx`/`.xlsm` files locally. Legacy 
 - **Fill all** writes only empty fields by default. Enable **Replace existing values** to overwrite after reviewing the warnings.
 - **Override requirement colour** applies a local, page-scoped style that makes `.input-node-view-builder-description` text black. The setting is saved locally and reapplied on page reload.
 - Parsed workbook requirements are saved in browser-session storage keyed to the procedure ID, so closing the popup does not discard the mapping. The mapping is cleared when the browser session ends and is never reused for a different procedure.
-- Each mapped field also gets a small **Fill from Excel** helper button so individual fields can be filled one at a time. Clicking a comment textarea fills it from the workbook’s `Vendor Response` value; a confirmation is shown before replacing existing content.
+- Each mapped field also gets a small **Fill from Excel** helper button so individual fields can be filled one at a time. Clicking an empty comment textarea shows an autofill suggestion with the workbook’s `Vendor Response` value; select **Fill from Excel** to insert it. A confirmation is shown before replacing existing content.
 - The extension never clicks Submit, Save, Next, or any other workflow button.
 
 ## Workbook mapping
