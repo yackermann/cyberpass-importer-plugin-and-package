@@ -55,6 +55,6 @@ export async function readWorkbookFile(file: File): Promise<ExcelRequirement[]> 
   }
   const xlsx = (globalThis as any).XLSX;
   if (!xlsx?.read) throw new Error('SheetJS runtime is missing. Run the build to bundle xlsx into vendor/xlsx.mjs.');
-  const workbook=xlsx.read(await file.arrayBuffer(), {type:'array', cellText:true, cellDates:true});
+  const workbook=await xlsx.read(await file.arrayBuffer(), {type:'array', cellText:true, cellDates:true});
   return parseWorkbook(workbook);
 }

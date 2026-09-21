@@ -9,7 +9,7 @@ A local-only Chrome/Edge Manifest V3 extension that restores the CyberPass vendo
 3. Open `chrome://extensions` (or `edge://extensions`), enable **Developer mode**, choose **Load unpacked**, and select this directory.
 4. Open a CyberPass assessment at the vendor-questionnaire step, click the extension, and drop a `.xlsx` or `.xlsm` workbook. The extension is inactive on all other sites and procedure steps.
 
-The bundled fallback reader handles OOXML `.xlsx`/`.xlsm` files locally. Legacy `.xls`/`.xlsb` files are detected and reported so they are never silently misread; use `.xlsx`/`.xlsm` for this first build. The declared SheetJS dependency is ready for swapping in a full legacy-format adapter.
+The bundled fallback reader handles OOXML `.xlsx`/`.xlsm` files locally and awaits asynchronous workbook decompression before parsing. Legacy `.xls`/`.xlsb` files are detected and reported so they are never silently misread; use `.xlsx`/`.xlsm` for this first build. The declared SheetJS dependency is ready for swapping in a full legacy-format adapter.
 
 ## Workflow
 

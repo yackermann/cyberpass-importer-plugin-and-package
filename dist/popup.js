@@ -192,7 +192,7 @@ async function readWorkbookFile(file) {
   }
   const xlsx = globalThis.XLSX;
   if (!xlsx?.read) throw new Error("SheetJS runtime is missing. Run the build to bundle xlsx into vendor/xlsx.mjs.");
-  const workbook = xlsx.read(await file.arrayBuffer(), { type: "array", cellText: true, cellDates: true });
+  const workbook = await xlsx.read(await file.arrayBuffer(), { type: "array", cellText: true, cellDates: true });
   return parseWorkbook(workbook);
 }
 
