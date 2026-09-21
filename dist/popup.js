@@ -231,10 +231,7 @@ async function clearWorkbookForCurrentProcedure() {
   await tab();
   const procedureId = procedureIdForUrl(activeTab?.url);
   if (!procedureId) throw new Error("Open the CyberPass vendor questionnaire URL before clearing the workbook.");
-  const saved = await chromeApi.storage.session.get({ workbooksByProcedure: {} });
-  const workbooksByProcedure = { ...saved.workbooksByProcedure || {} };
-  delete workbooksByProcedure[procedureId];
-  await chromeApi.storage.session.set({ workbooksByProcedure });
+  await chromeApi.runtime.sendMessage({ type: "CLEAR_WORKBOOK", procedureId });
   await send({ type: "INSTALL_HELPERS", requirements: [] }).catch(() => {
   });
   requirements = [];
@@ -272,6 +269,9 @@ async function send(message) {
   if (!isAllowedTab(activeTab)) throw new Error("Open the CyberPass vendor questionnaire URL before using the importer.");
   return chromeApi.tabs.sendMessage(activeTab.id, message);
 }
+async function sendWorker(message) {
+  return chromeApi.runtime.sendMessage(message);
+}
 async function load(file) {
   let procedureId = null;
   try {
@@ -281,10 +281,8 @@ async function load(file) {
     if (!procedureId) throw new Error("Could not determine the CyberPass procedure ID.");
     if (/\.xlsb?$/.test(file.name.toLowerCase())) setStatus("Legacy .xls/.xlsb files need a full SheetJS build; use .xlsx or .xlsm for this bundled reader.", "error");
     requirements = await readWorkbookFile(file);
-    const saved = await chromeApi.storage.session.get({ workbooksByProcedure: {} });
-    const workbooksByProcedure = { ...saved.workbooksByProcedure || {} };
-    workbooksByProcedure[procedureId] = { fileName: file.name, requirements };
-    await chromeApi.storage.session.set({ workbooksByProcedure });
+    const response = await sendWorker({ type: "STORE_WORKBOOK", procedureId, fileName: file.name, requirements });
+    if (response?.error) throw new Error(response.error);
     fileName.textContent = file.name;
     setWorkbookUi(file.name);
     excelCount.textContent = String(requirements.length);
@@ -295,12 +293,8 @@ async function load(file) {
   } catch (e) {
     requirements = [];
     setWorkbookUi(null);
-    if (procedureId) {
-      const saved = await chromeApi.storage.session.get({ workbooksByProcedure: {} });
-      const workbooksByProcedure = { ...saved.workbooksByProcedure || {} };
-      delete workbooksByProcedure[procedureId];
-      await chromeApi.storage.session.set({ workbooksByProcedure });
-    }
+    if (procedureId) await sendWorker({ type: "CLEAR_WORKBOOK", procedureId }).catch(() => {
+    });
     fillBtn.disabled = true;
     setStatus(String(e), "error");
   }
@@ -360,8 +354,8 @@ async function restoreWorkbookForProcedure() {
   if (!isAllowedTab(activeTab)) return;
   const procedureId = procedureIdForUrl(activeTab.url);
   if (!procedureId) return;
-  const saved = await chromeApi.storage.session.get({ workbooksByProcedure: {} });
-  const workbook = saved.workbooksByProcedure?.[procedureId];
+  const response = await sendWorker({ type: "GET_WORKBOOK", procedureId });
+  const workbook = response?.workbook;
   if (!workbook || !Array.isArray(workbook.requirements) || !workbook.requirements.length) return;
   requirements = workbook.requirements;
   fileName.textContent = workbook.fileName || "Restored workbook";

@@ -19,10 +19,7 @@ async function clearWorkbookForCurrentProcedure(): Promise<void> {
   await tab();
   const procedureId=procedureIdForUrl(activeTab?.url);
   if(!procedureId) throw new Error('Open the CyberPass vendor questionnaire URL before clearing the workbook.');
-  const saved=await chromeApi.storage.session.get({workbooksByProcedure:{}});
-  const workbooksByProcedure={...(saved.workbooksByProcedure||{})};
-  delete workbooksByProcedure[procedureId];
-  await chromeApi.storage.session.set({workbooksByProcedure});
+  await chromeApi.runtime.sendMessage({type:'CLEAR_WORKBOOK',procedureId});
   await send({type:'INSTALL_HELPERS',requirements:[]}).catch(()=>{});
   requirements=[];
   input.value='';
@@ -47,7 +44,8 @@ function isAllowedTab(candidate:any): boolean {
   } catch { return false; }
 }
 async function send(message:any){await tab();if(!isAllowedTab(activeTab)) throw new Error('Open the CyberPass vendor questionnaire URL before using the importer.');return chromeApi.tabs.sendMessage(activeTab.id,message);}
-async function load(file:File){let procedureId:string|null=null;try{await tab();if(!isAllowedTab(activeTab))throw new Error('Open the CyberPass vendor questionnaire URL before selecting a workbook.');procedureId=procedureIdForUrl(activeTab.url);if(!procedureId)throw new Error('Could not determine the CyberPass procedure ID.');if(/\.xlsb?$/.test(file.name.toLowerCase())) setStatus('Legacy .xls/.xlsb files need a full SheetJS build; use .xlsx or .xlsm for this bundled reader.','error');requirements=await readWorkbookFile(file);const saved=await chromeApi.storage.session.get({workbooksByProcedure:{}});const workbooksByProcedure={...(saved.workbooksByProcedure||{})};workbooksByProcedure[procedureId]={fileName:file.name,requirements};await chromeApi.storage.session.set({workbooksByProcedure});fileName.textContent=file.name;setWorkbookUi(file.name);excelCount.textContent=String(requirements.length);fillBtn.disabled=!requirements.length;await send({type:'INSTALL_HELPERS',requirements}).catch(()=>{});setStatus(requirements.length?`Extracted ${requirements.length} requirement responses for procedure ${procedureId}.`:'No requirement rows detected.','ok');}catch(e){requirements=[];setWorkbookUi(null);if(procedureId){const saved=await chromeApi.storage.session.get({workbooksByProcedure:{}});const workbooksByProcedure={...(saved.workbooksByProcedure||{})};delete workbooksByProcedure[procedureId];await chromeApi.storage.session.set({workbooksByProcedure});}fillBtn.disabled=true;setStatus(String(e),'error');}}
+async function sendWorker(message:any){return chromeApi.runtime.sendMessage(message);}
+async function load(file:File){let procedureId:string|null=null;try{await tab();if(!isAllowedTab(activeTab))throw new Error('Open the CyberPass vendor questionnaire URL before selecting a workbook.');procedureId=procedureIdForUrl(activeTab.url);if(!procedureId)throw new Error('Could not determine the CyberPass procedure ID.');if(/\.xlsb?$/.test(file.name.toLowerCase())) setStatus('Legacy .xls/.xlsb files need a full SheetJS build; use .xlsx or .xlsm for this bundled reader.','error');requirements=await readWorkbookFile(file);const response=await sendWorker({type:'STORE_WORKBOOK',procedureId,fileName:file.name,requirements});if(response?.error)throw new Error(response.error);fileName.textContent=file.name;setWorkbookUi(file.name);excelCount.textContent=String(requirements.length);fillBtn.disabled=!requirements.length;await send({type:'INSTALL_HELPERS',requirements}).catch(()=>{});setStatus(requirements.length?`Extracted ${requirements.length} requirement responses for procedure ${procedureId}.`:'No requirement rows detected.','ok');}catch(e){requirements=[];setWorkbookUi(null);if(procedureId)await sendWorker({type:'CLEAR_WORKBOOK',procedureId}).catch(()=>{});fillBtn.disabled=true;setStatus(String(e),'error');}}
 function confirmPageMovement(): boolean {
   return window.confirm('The CyberPass page will scroll while the extension loads dynamically rendered requirements. You will see the page moving. Continue?');
 }
@@ -60,8 +58,8 @@ async function restoreWorkbookForProcedure(){
   if(!isAllowedTab(activeTab))return;
   const procedureId=procedureIdForUrl(activeTab.url);
   if(!procedureId)return;
-  const saved=await chromeApi.storage.session.get({workbooksByProcedure:{}});
-  const workbook=saved.workbooksByProcedure?.[procedureId];
+  const response=await sendWorker({type:'GET_WORKBOOK',procedureId});
+  const workbook=response?.workbook;
   if(!workbook||!Array.isArray(workbook.requirements)||!workbook.requirements.length)return;
   requirements=workbook.requirements;
   fileName.textContent=workbook.fileName||'Restored workbook';

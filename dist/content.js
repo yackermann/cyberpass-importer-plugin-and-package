@@ -328,8 +328,8 @@ if (!isCyberPassQuestionnairePage()) {
     const match = location.pathname.match(/^\/procedures\/([^/]+)$/);
     if (!match) return;
     const procedureId = decodeURIComponent(match[1]);
-    const saved = await chrome.storage.session.get({ workbooksByProcedure: {} });
-    const workbook = saved.workbooksByProcedure?.[procedureId];
+    const response = await chrome.runtime.sendMessage({ type: "GET_WORKBOOK", procedureId });
+    const workbook = response?.workbook;
     if (Array.isArray(workbook?.requirements) && workbook.requirements.length) {
       installHelpers(workbook.requirements);
     }
