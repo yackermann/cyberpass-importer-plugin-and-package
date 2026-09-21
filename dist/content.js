@@ -128,10 +128,10 @@ async function setAnswerChoice(field, choice) {
     answer.focus();
     answer.click();
     setNativeValue(answer, choice);
-    await wait(0);
+    await wait(50);
     const option = [...document.querySelectorAll('[role="option"], .ant-select-item-option, .ant-select-item-option-content')].find((item) => normalizedAnswerLabel(item.textContent || "") === choice);
-    if (option) option.click();
-    else answer.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true }));
+    if (!option) return false;
+    option.click();
     mark(answer, "ok");
     return true;
   }
@@ -189,7 +189,10 @@ async function fillField(field, requirement, options, out) {
       out.mismatches++;
       mark(answer, "warn");
     } else if (!currentAnswer || options.replaceExisting) {
-      if (!await setAnswerChoice(field, choice)) out.errors.push(`${field.requirementId}: could not set Response to ${choice}`);
+      if (!await setAnswerChoice(field, choice)) {
+        out.failed++;
+        out.errors.push(`${field.requirementId}: could not set Response to ${choice}`);
+      }
     }
   } else {
     out.errors.push(`${field.requirementId}: Response control not found`);
