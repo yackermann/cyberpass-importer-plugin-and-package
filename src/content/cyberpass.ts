@@ -148,12 +148,12 @@ export function refreshHelpers(): void {
   for (const field of findFields().fields) {
     if (!helperRequirements.has(field.requirementId)) continue;
     const el = elementForField(field);
-    const requirement = helperRequirements.get(field.requirementId);
-    if (!el || !requirement) continue;
+    if (!el) continue;
     if (el instanceof HTMLTextAreaElement && !el.dataset.cyberpassCommentAutofill) {
       el.dataset.cyberpassCommentAutofill = '1';
       el.addEventListener('click', () => {
-        if (!requirement.value) return;
+        const requirement = helperRequirements.get(field.requirementId);
+        if (!requirement?.value) return;
         const current = readValue(el);
         if (!current.trim()) showCommentSuggestion(el, field, requirement);
         else if (current.trim() !== requirement.value.trim()) {

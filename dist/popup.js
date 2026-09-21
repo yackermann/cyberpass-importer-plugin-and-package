@@ -207,6 +207,7 @@ var dropPrompt = $("dropPrompt");
 var selectedFile = $("selectedFile");
 var selectedFileName = $("selectedFileName");
 var clearFile = $("clearFile");
+var workbookCard = $("workbookCard");
 var fileName = $("fileName");
 var excelCount = $("excelCount");
 var status = $("status");
@@ -223,6 +224,7 @@ function setWorkbookUi(name) {
   drop.classList.toggle("has-file", hasFile);
   dropPrompt.classList.toggle("hidden", hasFile);
   selectedFile.classList.toggle("hidden", !hasFile);
+  workbookCard.classList.toggle("hidden", !hasFile);
   if (hasFile) selectedFileName.textContent = name;
 }
 async function clearWorkbookForCurrentProcedure() {
@@ -233,10 +235,12 @@ async function clearWorkbookForCurrentProcedure() {
   const workbooksByProcedure = { ...saved.workbooksByProcedure || {} };
   delete workbooksByProcedure[procedureId];
   await chromeApi.storage.session.set({ workbooksByProcedure });
+  await send({ type: "INSTALL_HELPERS", requirements: [] }).catch(() => {
+  });
   requirements = [];
   input.value = "";
   setWorkbookUi(null);
-  fileName.textContent = "No file selected";
+  fileName.textContent = "";
   excelCount.textContent = "\u2014";
   fillBtn.disabled = true;
   setStatus("Workbook cleared for this procedure.", "ok");

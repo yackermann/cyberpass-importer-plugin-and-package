@@ -4,7 +4,7 @@ import type { ExcelRequirement } from '../shared/types';
 const chromeApi:any=(globalThis as any).chrome;
 let requirements:ExcelRequirement[]=[]; let activeTab:any=null;
 const $=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T;
-const drop=$('dropZone'), input=$<HTMLInputElement>('fileInput'), dropPrompt=$('dropPrompt'), selectedFile=$('selectedFile'), selectedFileName=$('selectedFileName'), clearFile=$<HTMLButtonElement>('clearFile'), fileName=$('fileName'), excelCount=$('excelCount'), status=$('status'), fillBtn=$<HTMLButtonElement>('fillBtn'), replace=$<HTMLInputElement>('replaceExisting'), overrideColour=$<HTMLInputElement>('overrideColour');
+const drop=$('dropZone'), input=$<HTMLInputElement>('fileInput'), dropPrompt=$('dropPrompt'), selectedFile=$('selectedFile'), selectedFileName=$('selectedFileName'), clearFile=$<HTMLButtonElement>('clearFile'), workbookCard=$('workbookCard'), fileName=$('fileName'), excelCount=$('excelCount'), status=$('status'), fillBtn=$<HTMLButtonElement>('fillBtn'), replace=$<HTMLInputElement>('replaceExisting'), overrideColour=$<HTMLInputElement>('overrideColour');
 (globalThis as any).XLSX=XLSX;
 function setStatus(message:string, kind?:'ok'|'error'){status.textContent=message;status.className=`status ${kind||''}`;}
 function setWorkbookUi(name:string|null): void {
@@ -12,6 +12,7 @@ function setWorkbookUi(name:string|null): void {
   drop.classList.toggle('has-file',hasFile);
   dropPrompt.classList.toggle('hidden',hasFile);
   selectedFile.classList.toggle('hidden',!hasFile);
+  workbookCard.classList.toggle('hidden',!hasFile);
   if(hasFile) selectedFileName.textContent=name!;
 }
 async function clearWorkbookForCurrentProcedure(): Promise<void> {
@@ -22,10 +23,11 @@ async function clearWorkbookForCurrentProcedure(): Promise<void> {
   const workbooksByProcedure={...(saved.workbooksByProcedure||{})};
   delete workbooksByProcedure[procedureId];
   await chromeApi.storage.session.set({workbooksByProcedure});
+  await send({type:'INSTALL_HELPERS',requirements:[]}).catch(()=>{});
   requirements=[];
   input.value='';
   setWorkbookUi(null);
-  fileName.textContent='No file selected';
+  fileName.textContent='';
   excelCount.textContent='—';
   fillBtn.disabled=true;
   setStatus('Workbook cleared for this procedure.','ok');
