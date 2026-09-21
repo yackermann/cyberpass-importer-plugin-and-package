@@ -233,7 +233,7 @@ function showCommentSuggestion(el, field, requirement) {
   const fillButton = document.createElement("button");
   fillButton.type = "button";
   fillButton.textContent = "Fill from Excel";
-  fillButton.style.cssText = "border:0;border-radius:5px;padding:6px 9px;background:#246b9f;color:#fff;font:600 11px system-ui;cursor:pointer;";
+  fillButton.style.cssText = "display:block;margin-left:auto;border:0;border-radius:5px;padding:6px 9px;background:#246b9f;color:#fff;font:600 11px system-ui;cursor:pointer;";
   fillButton.addEventListener("click", () => {
     setNativeValue(el, requirement.value);
     mark(el, "ok");
@@ -271,7 +271,7 @@ function refreshHelpers() {
     btn.type = "button";
     btn.textContent = "Fill from Excel";
     btn.dataset.cyberpassHelperFor = field.requirementId;
-    btn.style.cssText = "margin:4px 0;padding:3px 7px;font:11px system-ui;cursor:pointer;background:#eef6ff;border:1px solid #6aa7df;border-radius:4px;";
+    btn.style.cssText = "display:block;margin:4px 0 4px auto;padding:3px 7px;font:11px system-ui;cursor:pointer;background:#eef6ff;border:1px solid #6aa7df;border-radius:4px;";
     btn.addEventListener("click", () => {
       const requirement = helperRequirements.get(field.requirementId);
       if (!requirement?.value) return;
