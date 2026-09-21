@@ -13,8 +13,7 @@ The bundled fallback reader handles OOXML `.xlsx`/`.xlsm` files locally. Legacy 
 
 ## Workflow
 
-- **Scan page** inspects visible CyberPass requirement containers.
-- **Preview mapping** progressively scrolls the questionnaire so lazy-loaded requirements are discovered before comparing workbook values. Existing non-empty values that differ are shown as warnings and outlined in orange.
+- **Fill all** progressively scrolls the questionnaire so lazy-loaded requirements are discovered, then fills matching fields. Existing non-empty values that differ are shown as warnings and outlined in orange.
 - The page adapter watches DOM mutations and scrolling, so per-field helpers are added as new requirement batches appear.
 - **Fill all** writes only empty fields by default. Enable **Replace existing values** to overwrite after reviewing the warnings.
 - **Override requirement colour** applies a local, page-scoped style that makes `.input-node-view-builder-description` text black. The setting is saved locally and reapplied on page reload.
@@ -37,7 +36,7 @@ The bundled fallback reader handles OOXML `.xlsx`/`.xlsm` files locally. Legacy 
 
 ## Debugging DOM detection
 
-Use **Export debug** after Preview mapping. The JSON contains requirement IDs, a short sanitized text sample, and control metadata (`tag`, `id`, `name`, `aria-label`) without field values, cookies, tokens, passwords, or unrelated page data. The content adapter currently recognizes `.input-node-view-builder-header` text such as `Requirement 6.5` and searches its nearest `.input-node-view-builder-container` for `textarea`, text inputs, selects, and contenteditable controls.
+The content adapter recognizes `.input-node-view-builder-header` text such as `Requirement 6.5` and searches its nearest `.input-node-view-builder-container` for `textarea`, text inputs, selects, and contenteditable controls. Its debug representation contains requirement IDs and control metadata (`tag`, `id`, `name`, `aria-label`) without field values, cookies, tokens, passwords, or unrelated page data.
 
 To make matching deterministic, provide a saved DOM fragment for one or two representative requirements (including the requirement heading and its editable response control), plus whether the response should go into the answer select, comment textarea, or another control. A screenshot alone is useful for layout but does not reveal the control attributes needed for a deterministic adapter.
 

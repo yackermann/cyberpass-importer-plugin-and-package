@@ -199,7 +199,6 @@ async function readWorkbookFile(file) {
 // src/popup/popup.ts
 var chromeApi = globalThis.chrome;
 var requirements = [];
-var lastPreview = null;
 var activeTab = null;
 var $ = (id) => document.getElementById(id);
 var drop = $("dropZone");
@@ -210,17 +209,10 @@ var selectedFileName = $("selectedFileName");
 var clearFile = $("clearFile");
 var fileName = $("fileName");
 var excelCount = $("excelCount");
-var pageCount = $("pageCount");
 var status = $("status");
-var scanBtn = $("scanBtn");
-var previewBtn = $("previewBtn");
 var fillBtn = $("fillBtn");
 var replace = $("replaceExisting");
 var overrideColour = $("overrideColour");
-var preview = $("preview");
-var previewRows = $("previewRows");
-var summary = $("summary");
-var exportBtn = $("exportBtn");
 globalThis.XLSX = xlsx_default;
 function setStatus(message, kind) {
   status.textContent = message;
@@ -246,10 +238,7 @@ async function clearWorkbookForCurrentProcedure() {
   setWorkbookUi(null);
   fileName.textContent = "No file selected";
   excelCount.textContent = "\u2014";
-  previewBtn.disabled = true;
   fillBtn.disabled = true;
-  preview.classList.add("hidden");
-  summary.classList.add("hidden");
   setStatus("Workbook cleared for this procedure.", "ok");
 }
 async function tab() {
@@ -295,8 +284,9 @@ async function load(file) {
     fileName.textContent = file.name;
     setWorkbookUi(file.name);
     excelCount.textContent = String(requirements.length);
-    previewBtn.disabled = !requirements.length;
     fillBtn.disabled = !requirements.length;
+    await send({ type: "INSTALL_HELPERS", requirements }).catch(() => {
+    });
     setStatus(requirements.length ? `Extracted ${requirements.length} requirement responses for procedure ${procedureId}.` : "No requirement rows detected.", "ok");
   } catch (e) {
     requirements = [];
@@ -307,82 +297,21 @@ async function load(file) {
       delete workbooksByProcedure[procedureId];
       await chromeApi.storage.session.set({ workbooksByProcedure });
     }
-    previewBtn.disabled = true;
     fillBtn.disabled = true;
     setStatus(String(e), "error");
   }
 }
-function renderRows(rows) {
-  previewRows.innerHTML = "";
-  for (const row of rows.slice(0, 120)) {
-    const d = document.createElement("div");
-    d.className = "mapping-row";
-    const value = row.excel?.value || row.currentValue || "\u2014";
-    const label = row.status === "matched" ? "ready" : row.status === "mismatch" ? "warning" : row.status.includes("unmatched") ? "unmatched" : row.status;
-    const cls = row.status === "mismatch" ? "warn" : row.status.includes("unmatched") ? "bad" : "";
-    d.innerHTML = `<span class="rid">${row.requirementId}</span><span class="val" title="${escapeHtml(value)}">${escapeHtml(value)}</span><span class="pill ${cls}">${label}</span>`;
-    previewRows.appendChild(d);
-  }
-  if (rows.length > 120) {
-    const more = document.createElement("div");
-    more.style.cssText = "font-size:10px;color:#778; padding:5px";
-    more.textContent = `Showing 120 of ${rows.length} rows`;
-    previewRows.appendChild(more);
-  }
-}
-function escapeHtml(value) {
-  return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[c] || c);
-}
 function confirmPageMovement() {
   return window.confirm("The CyberPass page will scroll while the extension loads dynamically rendered requirements. You will see the page moving. Continue?");
 }
-async function doPreview(askToScroll = true) {
-  if (askToScroll && !confirmPageMovement()) return;
-  try {
-    const result = await send({ type: "PREVIEW", requirements });
-    lastPreview = result;
-    preview.classList.remove("hidden");
-    renderRows(result.rows);
-    const matched = result.rows.filter((r) => r.status === "matched" || r.status === "mismatch").length;
-    const unmatchedExcel = result.rows.filter((r) => r.status === "unmatched-excel").length;
-    const mismatch = result.rows.filter((r) => r.status === "mismatch").length;
-    pageCount.textContent = String(result.scan.fields.length);
-    summary.classList.remove("hidden");
-    summary.textContent = `${requirements.length} workbook rows \xB7 ${result.scan.fields.length} page requirements \xB7 ${matched} mapped \xB7 ${unmatchedExcel} workbook-only \xB7 ${mismatch} existing value warning`;
-    setStatus("Preview ready. Warnings are highlighted on the CyberPass page; nothing has been written.", "ok");
-    await send({ type: "INSTALL_HELPERS", requirements });
-  } catch (e) {
-    setStatus(`Could not inspect the active tab: ${String(e)}`, "error");
-  }
-}
-scanBtn.addEventListener("click", async () => {
-  if (!confirmPageMovement()) return;
-  try {
-    const result = await send({ type: "SCAN_PAGE" });
-    pageCount.textContent = String(result.fields.length);
-    setStatus(`Found ${result.fields.length} CyberPass requirements. Preview mapping to compare values.`, "ok");
-  } catch (e) {
-    setStatus("Open the CyberPass assessment tab before scanning.", "error");
-  }
-});
-previewBtn.addEventListener("click", () => doPreview());
 fillBtn.addEventListener("click", async () => {
   if (!confirmPageMovement()) return;
   try {
     const result = await send({ type: "FILL", requirements, options: { replaceExisting: replace.checked } });
     setStatus(`Filled ${result.filled}; skipped ${result.skipped}; ${result.mismatches} mismatch warnings; ${result.failed} failed. The form was not submitted.`, result.failed ? "error" : "ok");
-    if (lastPreview) await doPreview(false);
   } catch (e) {
     setStatus(String(e), "error");
   }
-});
-exportBtn.addEventListener("click", () => {
-  const payload = { exportedAt: (/* @__PURE__ */ new Date()).toISOString(), workbook: requirements.map((r) => ({ ...r, value: r.value.slice(0, 500) })), page: lastPreview?.scan?.debug || [] };
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
-  a.download = "cyberpass-debug.json";
-  a.click();
-  setStatus("Sanitized debug information exported locally.", "ok");
 });
 drop.addEventListener("click", () => input.click());
 clearFile.addEventListener("click", async (event) => {
@@ -434,8 +363,9 @@ async function restoreWorkbookForProcedure() {
   fileName.textContent = workbook.fileName || "Restored workbook";
   setWorkbookUi(workbook.fileName || "Restored workbook");
   excelCount.textContent = String(requirements.length);
-  previewBtn.disabled = false;
   fillBtn.disabled = false;
+  await send({ type: "INSTALL_HELPERS", requirements }).catch(() => {
+  });
   setStatus(`Restored ${requirements.length} requirement responses for procedure ${procedureId}.`, "ok");
 }
 chromeApi.storage.local.remove(["workbookRequirements", "workbookFileName"]);
