@@ -20,9 +20,123 @@ function findFields(): ScanResult {
 function elementForField(field:CyberPassField):HTMLElement|null { const ordered=[...field.controls].sort((a,b)=>({textarea:0,contenteditable:1,select:2,input:3}[a.tag]??4)-({textarea:0,contenteditable:1,select:2,input:3}[b.tag]??4)); const c=ordered[0]; if(!c)return null; if(c.id)return document.getElementById(c.id); if(c.selectorHint){try{return document.querySelector(c.selectorHint)}catch{}} return null; }
 function mark(el:HTMLElement,kind:'ok'|'warn'|'fail'){const old=el.style.outline; el.style.outline=kind==='ok'?'3px solid #2e9d62':kind==='warn'?'3px solid #d97706':'3px solid #dc2626'; el.style.outlineOffset='2px'; setTimeout(()=>{el.style.outline=old;el.style.outlineOffset='';},3500);}
 export function scanPage(){return findFields();}
-export function preview(requirements:ExcelRequirement[]){const scan=findFields(); const byId=new Map(requirements.map(r=>[r.requirementId,r])); const rows=[] as any[]; for(const f of scan.fields){const r=byId.get(f.requirementId); const el=elementForField(f); const current=el?readValue(el):''; if(r){const status=!r.value?'empty':current&&current.trim()!==r.value.trim()?'mismatch':'matched'; rows.push({requirementId:f.requirementId,excel:r,cyberPass:f,status,currentValue:current,reason:status==='mismatch'?'Existing value differs from workbook':''}); if(status==='mismatch'&&el)mark(el,'warn');} else rows.push({requirementId:f.requirementId,cyberPass:f,status:'unmatched-page',currentValue:current}); }
-  for(const r of requirements)if(!scan.fields.some(f=>f.requirementId===r.requirementId))rows.push({requirementId:r.requirementId,excel:r,status:'unmatched-excel'});
-  return {scan,rows}; }
-export function fill(requirements:ExcelRequirement[],options:FillOptions):FillResult {const scan=findFields();const byId=new Map(requirements.map(r=>[r.requirementId,r]));const out:FillResult={filled:0,skipped:0,failed:0,mismatches:0,errors:[]}; for(const f of scan.fields){const r=byId.get(f.requirementId);if(!r)continue;const el=elementForField(f);if(!el){out.failed++;out.errors.push(`${f.requirementId}: editable control not found`);continue;}const current=readValue(el);if(!r.value){out.skipped++;continue;}if(current.trim()&&!options.replaceExisting){if(current.trim()!==r.value.trim()){out.mismatches++;mark(el,'warn');}out.skipped++;continue;}try{setNativeValue(el,r.value);mark(el,'ok');out.filled++;}catch(e){out.failed++;mark(el,'fail');out.errors.push(`${f.requirementId}: ${String(e)}`);}} return out;}
-export function installHelpers(requirements:ExcelRequirement[]){const byId=new Map(requirements.map(r=>[r.requirementId,r])); document.querySelectorAll('[data-cyberpass-helper]').forEach(e=>e.remove()); for(const f of findFields().fields){const r=byId.get(f.requirementId);if(!r)continue;const el=elementForField(f);if(!el)continue;const btn=document.createElement('button');btn.type='button';btn.textContent='Fill from Excel';btn.dataset.cyberpassHelper='1';btn.style.cssText='margin:4px 0;padding:3px 7px;font:11px system-ui;cursor:pointer;background:#eef6ff;border:1px solid #6aa7df;border-radius:4px;';btn.addEventListener('click',()=>{const current=readValue(el);if(current&&current.trim()!==r.value.trim()&&!confirm(`Requirement ${f.requirementId} already has content. Replace it?`))return;setNativeValue(el,r.value);mark(el,'ok');btn.textContent='Filled ✓';}); el.parentElement?.insertBefore(btn,el);}}
+
+function wait(ms:number):Promise<void>{return new Promise(resolve=>setTimeout(resolve,ms));}
+function scrollTargets(): HTMLElement[] {
+  const targets: HTMLElement[] = [];
+  const root=document.scrollingElement as HTMLElement|null;
+  if(root) targets.push(root);
+  for(const element of [...document.querySelectorAll<HTMLElement>('*')]) {
+    if(element===root) continue;
+    const style=getComputedStyle(element);
+    if(element.scrollHeight-element.clientHeight>80 && /(auto|scroll)/.test(style.overflowY)) targets.push(element);
+  }
+  return targets;
+}
+
+/** Walk lazy-loaded scroll regions until no new requirement containers appear. */
+async function walkLazyRequirements(onFields:(fields:CyberPassField[])=>void):Promise<void> {
+  const positions=new Map<HTMLElement,number>();
+  let stable=0;
+  for(let pass=0;pass<40 && stable<2;pass++) {
+    const before=findFields().fields;
+    onFields(before);
+    const targets=scrollTargets();
+    for(const target of targets) {
+      if(!positions.has(target)) positions.set(target,target.scrollTop);
+      target.scrollTop=target.scrollHeight;
+    }
+    window.scrollTo({top:document.documentElement.scrollHeight,behavior:'auto'});
+    await wait(180);
+    const after=findFields().fields;
+    const beforeIds=new Set(before.map(field=>field.requirementId));
+    const added=after.some(field=>!beforeIds.has(field.requirementId));
+    stable=added?0:stable+1;
+  }
+  onFields(findFields().fields);
+  for(const [target,top] of positions) target.scrollTop=top;
+}
+
+function fillField(field:CyberPassField, requirement:ExcelRequirement, options:FillOptions, out:FillResult):void {
+  const el=elementForField(field);
+  if(!el){out.failed++;out.errors.push(`${field.requirementId}: editable control not found`);return;}
+  const current=readValue(el);
+  if(!requirement.value){out.skipped++;return;}
+  if(current.trim()&&!options.replaceExisting){
+    if(current.trim()!==requirement.value.trim()){out.mismatches++;mark(el,'warn');}
+    out.skipped++;return;
+  }
+  try{setNativeValue(el,requirement.value);mark(el,'ok');out.filled++;}
+  catch(error){out.failed++;mark(el,'fail');out.errors.push(`${field.requirementId}: ${String(error)}`);}
+}
+
+export async function preview(requirements:ExcelRequirement[]){
+  const byId=new Map(requirements.map(r=>[r.requirementId,r]));
+  const rowsById=new Map<string,any>();
+  await walkLazyRequirements(fields=>{
+    for(const field of fields){
+      const requirement=byId.get(field.requirementId); const el=elementForField(field); const current=el?readValue(el):'';
+      if(requirement){const status=!requirement.value?'empty':current&&current.trim()!==requirement.value.trim()?'mismatch':'matched'; rowsById.set(field.requirementId,{requirementId:field.requirementId,excel:requirement,cyberPass:field,status,currentValue:current,reason:status==='mismatch'?'Existing value differs from workbook':''}); if(status==='mismatch'&&el)mark(el,'warn');}
+      else rowsById.set(field.requirementId,{requirementId:field.requirementId,cyberPass:field,status:'unmatched-page',currentValue:current});
+    }
+  });
+  for(const requirement of requirements) if(!rowsById.has(requirement.requirementId)) rowsById.set(requirement.requirementId,{requirementId:requirement.requirementId,excel:requirement,status:'unmatched-excel'});
+  const fields=findFields();
+  return {scan:fields,rows:[...rowsById.values()]};
+}
+
+export async function fill(requirements:ExcelRequirement[],options:FillOptions):Promise<FillResult> {
+  const byId=new Map(requirements.map(r=>[r.requirementId,r]));
+  const processed=new Set<string>();
+  const out:FillResult={filled:0,skipped:0,failed:0,mismatches:0,errors:[]};
+  await walkLazyRequirements(fields=>{
+    for(const field of fields){if(processed.has(field.requirementId))continue;const requirement=byId.get(field.requirementId);if(!requirement)continue;processed.add(field.requirementId);fillField(field,requirement,options,out);}
+  });
+  return out;
+}
+let helperRequirements = new Map<string, ExcelRequirement>();
+let dynamicObserver: MutationObserver | null = null;
+let refreshTimer: number | undefined;
+
+/** Safe to call after every lazy render: existing buttons are left in place. */
+export function refreshHelpers(): void {
+  for (const field of findFields().fields) {
+    if (!helperRequirements.has(field.requirementId)) continue;
+    const el = elementForField(field);
+    const parent = el?.parentElement;
+    if (!el || !parent || [...parent.children].some(child =>
+      child instanceof HTMLElement && child.dataset.cyberpassHelperFor === field.requirementId)) continue;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = 'Fill from Excel';
+    btn.dataset.cyberpassHelperFor = field.requirementId;
+    btn.style.cssText = 'margin:4px 0;padding:3px 7px;font:11px system-ui;cursor:pointer;background:#eef6ff;border:1px solid #6aa7df;border-radius:4px;';
+    btn.addEventListener('click', () => {
+      const requirement = helperRequirements.get(field.requirementId);
+      if (!requirement?.value) return;
+      const current = readValue(el);
+      if (current && current.trim() !== requirement.value.trim() &&
+          !confirm(`Requirement ${field.requirementId} already has content. Replace it?`)) return;
+      setNativeValue(el, requirement.value);
+      mark(el, 'ok');
+      btn.textContent = 'Filled ✓';
+    });
+    parent.insertBefore(btn, el);
+  }
+}
+
+export function installHelpers(requirements: ExcelRequirement[]): void {
+  helperRequirements = new Map(requirements.map(requirement => [requirement.requirementId, requirement]));
+  document.querySelectorAll('[data-cyberpass-helper-for]').forEach(element => element.remove());
+  refreshHelpers();
+  if(!dynamicObserver){
+    const scheduleRefresh=()=>{
+      if(refreshTimer) window.clearTimeout(refreshTimer);
+      refreshTimer=window.setTimeout(()=>refreshHelpers(),120);
+    };
+    dynamicObserver=new MutationObserver(scheduleRefresh);
+    dynamicObserver.observe(document.body,{childList:true,subtree:true});
+    window.addEventListener('scroll',scheduleRefresh,{passive:true});
+  }
+}
 export function debugDom(){return findFields().debug;}

@@ -14,7 +14,8 @@ The bundled fallback reader handles OOXML `.xlsx`/`.xlsm` files locally. Legacy 
 ## Workflow
 
 - **Scan page** inspects visible CyberPass requirement containers.
-- **Preview mapping** compares workbook values with the current page. Existing non-empty values that differ are shown as warnings and outlined in orange.
+- **Preview mapping** progressively scrolls the questionnaire so lazy-loaded requirements are discovered before comparing workbook values. Existing non-empty values that differ are shown as warnings and outlined in orange.
+- The page adapter watches DOM mutations and scrolling, so per-field helpers are added as new requirement batches appear.
 - **Fill all** writes only empty fields by default. Enable **Replace existing values** to overwrite after reviewing the warnings.
 - **Override requirement colour** applies a local, page-scoped style that makes `.input-node-view-builder-description` text black. The setting is saved locally and reapplied on page reload.
 - Parsed workbook requirements are saved in browser-session storage keyed to the procedure ID, so closing the popup does not discard the mapping. The mapping is cleared when the browser session ends and is never reused for a different procedure.

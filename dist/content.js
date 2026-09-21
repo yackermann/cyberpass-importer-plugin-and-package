@@ -99,82 +99,143 @@ function mark(el, kind) {
 function scanPage() {
   return findFields();
 }
-function preview(requirements) {
-  const scan = findFields();
-  const byId = new Map(requirements.map((r) => [r.requirementId, r]));
-  const rows = [];
-  for (const f of scan.fields) {
-    const r = byId.get(f.requirementId);
-    const el = elementForField(f);
-    const current = el ? readValue(el) : "";
-    if (r) {
-      const status = !r.value ? "empty" : current && current.trim() !== r.value.trim() ? "mismatch" : "matched";
-      rows.push({ requirementId: f.requirementId, excel: r, cyberPass: f, status, currentValue: current, reason: status === "mismatch" ? "Existing value differs from workbook" : "" });
-      if (status === "mismatch" && el) mark(el, "warn");
-    } else rows.push({ requirementId: f.requirementId, cyberPass: f, status: "unmatched-page", currentValue: current });
-  }
-  for (const r of requirements) if (!scan.fields.some((f) => f.requirementId === r.requirementId)) rows.push({ requirementId: r.requirementId, excel: r, status: "unmatched-excel" });
-  return { scan, rows };
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
-function fill(requirements, options) {
-  const scan = findFields();
-  const byId = new Map(requirements.map((r) => [r.requirementId, r]));
-  const out = { filled: 0, skipped: 0, failed: 0, mismatches: 0, errors: [] };
-  for (const f of scan.fields) {
-    const r = byId.get(f.requirementId);
-    if (!r) continue;
-    const el = elementForField(f);
-    if (!el) {
-      out.failed++;
-      out.errors.push(`${f.requirementId}: editable control not found`);
-      continue;
-    }
-    const current = readValue(el);
-    if (!r.value) {
-      out.skipped++;
-      continue;
-    }
-    if (current.trim() && !options.replaceExisting) {
-      if (current.trim() !== r.value.trim()) {
-        out.mismatches++;
-        mark(el, "warn");
-      }
-      out.skipped++;
-      continue;
-    }
-    try {
-      setNativeValue(el, r.value);
-      mark(el, "ok");
-      out.filled++;
-    } catch (e) {
-      out.failed++;
-      mark(el, "fail");
-      out.errors.push(`${f.requirementId}: ${String(e)}`);
-    }
+function scrollTargets() {
+  const targets = [];
+  const root = document.scrollingElement;
+  if (root) targets.push(root);
+  for (const element of [...document.querySelectorAll("*")]) {
+    if (element === root) continue;
+    const style = getComputedStyle(element);
+    if (element.scrollHeight - element.clientHeight > 80 && /(auto|scroll)/.test(style.overflowY)) targets.push(element);
   }
+  return targets;
+}
+async function walkLazyRequirements(onFields) {
+  const positions = /* @__PURE__ */ new Map();
+  let stable = 0;
+  for (let pass = 0; pass < 40 && stable < 2; pass++) {
+    const before = findFields().fields;
+    onFields(before);
+    const targets = scrollTargets();
+    for (const target of targets) {
+      if (!positions.has(target)) positions.set(target, target.scrollTop);
+      target.scrollTop = target.scrollHeight;
+    }
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "auto" });
+    await wait(180);
+    const after = findFields().fields;
+    const beforeIds = new Set(before.map((field) => field.requirementId));
+    const added = after.some((field) => !beforeIds.has(field.requirementId));
+    stable = added ? 0 : stable + 1;
+  }
+  onFields(findFields().fields);
+  for (const [target, top] of positions) target.scrollTop = top;
+}
+function fillField(field, requirement, options, out) {
+  const el = elementForField(field);
+  if (!el) {
+    out.failed++;
+    out.errors.push(`${field.requirementId}: editable control not found`);
+    return;
+  }
+  const current = readValue(el);
+  if (!requirement.value) {
+    out.skipped++;
+    return;
+  }
+  if (current.trim() && !options.replaceExisting) {
+    if (current.trim() !== requirement.value.trim()) {
+      out.mismatches++;
+      mark(el, "warn");
+    }
+    out.skipped++;
+    return;
+  }
+  try {
+    setNativeValue(el, requirement.value);
+    mark(el, "ok");
+    out.filled++;
+  } catch (error) {
+    out.failed++;
+    mark(el, "fail");
+    out.errors.push(`${field.requirementId}: ${String(error)}`);
+  }
+}
+async function preview(requirements) {
+  const byId = new Map(requirements.map((r) => [r.requirementId, r]));
+  const rowsById = /* @__PURE__ */ new Map();
+  await walkLazyRequirements((fields2) => {
+    for (const field of fields2) {
+      const requirement = byId.get(field.requirementId);
+      const el = elementForField(field);
+      const current = el ? readValue(el) : "";
+      if (requirement) {
+        const status = !requirement.value ? "empty" : current && current.trim() !== requirement.value.trim() ? "mismatch" : "matched";
+        rowsById.set(field.requirementId, { requirementId: field.requirementId, excel: requirement, cyberPass: field, status, currentValue: current, reason: status === "mismatch" ? "Existing value differs from workbook" : "" });
+        if (status === "mismatch" && el) mark(el, "warn");
+      } else rowsById.set(field.requirementId, { requirementId: field.requirementId, cyberPass: field, status: "unmatched-page", currentValue: current });
+    }
+  });
+  for (const requirement of requirements) if (!rowsById.has(requirement.requirementId)) rowsById.set(requirement.requirementId, { requirementId: requirement.requirementId, excel: requirement, status: "unmatched-excel" });
+  const fields = findFields();
+  return { scan: fields, rows: [...rowsById.values()] };
+}
+async function fill(requirements, options) {
+  const byId = new Map(requirements.map((r) => [r.requirementId, r]));
+  const processed = /* @__PURE__ */ new Set();
+  const out = { filled: 0, skipped: 0, failed: 0, mismatches: 0, errors: [] };
+  await walkLazyRequirements((fields) => {
+    for (const field of fields) {
+      if (processed.has(field.requirementId)) continue;
+      const requirement = byId.get(field.requirementId);
+      if (!requirement) continue;
+      processed.add(field.requirementId);
+      fillField(field, requirement, options, out);
+    }
+  });
   return out;
 }
-function installHelpers(requirements) {
-  const byId = new Map(requirements.map((r) => [r.requirementId, r]));
-  document.querySelectorAll("[data-cyberpass-helper]").forEach((e) => e.remove());
-  for (const f of findFields().fields) {
-    const r = byId.get(f.requirementId);
-    if (!r) continue;
-    const el = elementForField(f);
-    if (!el) continue;
+var helperRequirements = /* @__PURE__ */ new Map();
+var dynamicObserver = null;
+var refreshTimer;
+function refreshHelpers() {
+  for (const field of findFields().fields) {
+    if (!helperRequirements.has(field.requirementId)) continue;
+    const el = elementForField(field);
+    const parent = el?.parentElement;
+    if (!el || !parent || [...parent.children].some((child) => child instanceof HTMLElement && child.dataset.cyberpassHelperFor === field.requirementId)) continue;
     const btn = document.createElement("button");
     btn.type = "button";
     btn.textContent = "Fill from Excel";
-    btn.dataset.cyberpassHelper = "1";
+    btn.dataset.cyberpassHelperFor = field.requirementId;
     btn.style.cssText = "margin:4px 0;padding:3px 7px;font:11px system-ui;cursor:pointer;background:#eef6ff;border:1px solid #6aa7df;border-radius:4px;";
     btn.addEventListener("click", () => {
+      const requirement = helperRequirements.get(field.requirementId);
+      if (!requirement?.value) return;
       const current = readValue(el);
-      if (current && current.trim() !== r.value.trim() && !confirm(`Requirement ${f.requirementId} already has content. Replace it?`)) return;
-      setNativeValue(el, r.value);
+      if (current && current.trim() !== requirement.value.trim() && !confirm(`Requirement ${field.requirementId} already has content. Replace it?`)) return;
+      setNativeValue(el, requirement.value);
       mark(el, "ok");
       btn.textContent = "Filled \u2713";
     });
-    el.parentElement?.insertBefore(btn, el);
+    parent.insertBefore(btn, el);
+  }
+}
+function installHelpers(requirements) {
+  helperRequirements = new Map(requirements.map((requirement) => [requirement.requirementId, requirement]));
+  document.querySelectorAll("[data-cyberpass-helper-for]").forEach((element) => element.remove());
+  refreshHelpers();
+  if (!dynamicObserver) {
+    const scheduleRefresh = () => {
+      if (refreshTimer) window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => refreshHelpers(), 120);
+    };
+    dynamicObserver = new MutationObserver(scheduleRefresh);
+    dynamicObserver.observe(document.body, { childList: true, subtree: true });
+    window.addEventListener("scroll", scheduleRefresh, { passive: true });
   }
 }
 function debugDom() {
@@ -202,8 +263,8 @@ if (!isCyberPassQuestionnairePage()) {
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     try {
       if (message.type === "SCAN_PAGE") sendResponse(scanPage());
-      else if (message.type === "PREVIEW") sendResponse(preview(message.requirements));
-      else if (message.type === "FILL") sendResponse(fill(message.requirements, message.options));
+      else if (message.type === "PREVIEW") preview(message.requirements).then(sendResponse).catch((error) => sendResponse({ error: String(error) }));
+      else if (message.type === "FILL") fill(message.requirements, message.options).then(sendResponse).catch((error) => sendResponse({ error: String(error) }));
       else if (message.type === "DEBUG_DOM") sendResponse(debugDom());
       else if (message.type === "INSTALL_HELPERS") {
         installHelpers(message.requirements);
