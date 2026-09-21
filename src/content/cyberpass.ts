@@ -23,6 +23,14 @@ function answerElementForField(field:CyberPassField):HTMLElement|null {
   const control=field.controls.find(item=>item.id?.toLowerCase().endsWith('.answer'));
   return control?.id?document.getElementById(control.id):null;
 }
+function currentAnswerChoice(answer:HTMLElement):'N/A'|'YES'|'NO'|null {
+  if(answer instanceof HTMLSelectElement) return normalizedAnswerLabel(answer.selectedOptions[0]?.text||answer.value);
+  // CyberPass uses Ant Design's searchable combobox. Its input value remains
+  // empty; the selected label is rendered in the surrounding content node.
+  const select=answer.closest('.ant-select');
+  const selected=select?.querySelector<HTMLElement>('.ant-select-content, .ant-select-selection-item');
+  return normalizedAnswerLabel(selected?.textContent||readValue(answer));
+}
 function startsWithNotApplicable(value:string):boolean{return /^\s*n\/a\b/i.test(value);}
 function desiredAnswer(value:string):'N/A'|'YES'|'NO'{return startsWithNotApplicable(value)?'N/A':value.trim()?'YES':'NO';}
 function normalizedAnswerLabel(value:string):'N/A'|'YES'|'NO'|null {
@@ -44,12 +52,22 @@ async function setAnswerChoice(field:CyberPassField, choice:'N/A'|'YES'|'NO'):Pr
     return true;
   }
   if(answer instanceof HTMLInputElement){
+    const select=answer.closest<HTMLElement>('.ant-select')||answer.parentElement;
+    // Clicking the visible Ant Select control is more reliable than typing in
+    // its hidden/search input and follows the same path as a user selection.
+    (select||answer).dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));
+    (select||answer).click();
     answer.focus();
-    answer.click();
-    await wait(100);
-    const option=[...document.querySelectorAll<HTMLElement>('[role="option"], .ant-select-item-option')].find(item=>item.getClientRects().length>0 && normalizedAnswerLabel(item.textContent||'')===choice);
+    await wait(120);
+    const options=[...document.querySelectorAll<HTMLElement>('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option')];
+    const fallback=[...document.querySelectorAll<HTMLElement>('.ant-select-item-option')];
+    const option=[...(options.length?options:fallback)].find(item=>normalizedAnswerLabel(item.querySelector('.ant-select-item-option-content')?.textContent||item.textContent||'')===choice);
     if(!option)return false;
-    option.click();
+    const optionContent=option.querySelector<HTMLElement>('.ant-select-item-option-content')||option;
+    optionContent.click();
+    await wait(80);
+    const selected=currentAnswerChoice(answer);
+    if(selected!==choice)return false;
     mark(answer,'ok');
     return true;
   }
@@ -102,8 +120,8 @@ async function fillField(field:CyberPassField, requirement:ExcelRequirement, opt
   const choice=desiredAnswer(requirement.value);
   const answer=answerElementForField(field);
   if(answer){
-    const currentAnswer=readValue(answer).trim();
-    if(currentAnswer && currentAnswer.toLowerCase()!==choice.toLowerCase() && !options.replaceExisting){
+    const currentAnswer=currentAnswerChoice(answer);
+    if(currentAnswer && currentAnswer!==choice && !options.replaceExisting){
       out.mismatches++;
       mark(answer,'warn');
     } else if(!currentAnswer || options.replaceExisting) {

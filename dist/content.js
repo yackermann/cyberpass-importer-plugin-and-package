@@ -100,6 +100,12 @@ function answerElementForField(field) {
   const control = field.controls.find((item) => item.id?.toLowerCase().endsWith(".answer"));
   return control?.id ? document.getElementById(control.id) : null;
 }
+function currentAnswerChoice(answer) {
+  if (answer instanceof HTMLSelectElement) return normalizedAnswerLabel(answer.selectedOptions[0]?.text || answer.value);
+  const select = answer.closest(".ant-select");
+  const selected = select?.querySelector(".ant-select-content, .ant-select-selection-item");
+  return normalizedAnswerLabel(selected?.textContent || readValue(answer));
+}
 function startsWithNotApplicable(value) {
   return /^\s*n\/a\b/i.test(value);
 }
@@ -125,12 +131,20 @@ async function setAnswerChoice(field, choice) {
     return true;
   }
   if (answer instanceof HTMLInputElement) {
+    const select = answer.closest(".ant-select") || answer.parentElement;
+    (select || answer).dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
+    (select || answer).click();
     answer.focus();
-    answer.click();
-    await wait(100);
-    const option = [...document.querySelectorAll('[role="option"], .ant-select-item-option')].find((item) => item.getClientRects().length > 0 && normalizedAnswerLabel(item.textContent || "") === choice);
+    await wait(120);
+    const options = [...document.querySelectorAll(".ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option")];
+    const fallback = [...document.querySelectorAll(".ant-select-item-option")];
+    const option = [...options.length ? options : fallback].find((item) => normalizedAnswerLabel(item.querySelector(".ant-select-item-option-content")?.textContent || item.textContent || "") === choice);
     if (!option) return false;
-    option.click();
+    const optionContent = option.querySelector(".ant-select-item-option-content") || option;
+    optionContent.click();
+    await wait(80);
+    const selected = currentAnswerChoice(answer);
+    if (selected !== choice) return false;
     mark(answer, "ok");
     return true;
   }
@@ -183,8 +197,8 @@ async function fillField(field, requirement, options, out) {
   const choice = desiredAnswer(requirement.value);
   const answer = answerElementForField(field);
   if (answer) {
-    const currentAnswer = readValue(answer).trim();
-    if (currentAnswer && currentAnswer.toLowerCase() !== choice.toLowerCase() && !options.replaceExisting) {
+    const currentAnswer = currentAnswerChoice(answer);
+    if (currentAnswer && currentAnswer !== choice && !options.replaceExisting) {
       out.mismatches++;
       mark(answer, "warn");
     } else if (!currentAnswer || options.replaceExisting) {
