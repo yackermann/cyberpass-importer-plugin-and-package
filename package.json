@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:library": "npm --prefix packages/cyberpass-vq-importer run build",
+    "typecheck:library": "npm --prefix packages/cyberpass-vq-importer run typecheck"
   },
   "devDependencies": {
     "esbuild": "^0.25.0",

@@ -34,6 +34,16 @@ The bundled fallback reader handles OOXML `.xlsx`/`.xlsm` files locally and awai
 - `src/popup/*` — file drop, preview, controls, sanitized debug export.
 - `src/shared/*` — shared types and messages.
 
+## Reusable CyberPass integration library
+
+The publishable package in [`packages/cyberpass-vq-importer`](./packages/cyberpass-vq-importer) exposes the workbook parser and the browser DOM adapter for CyberPass itself. It is designed so CyberPass can add a native **Import Excel VQ** button without adopting the extension UI or Chrome APIs.
+
+```bash
+npm install @yuriy-ackermann/cyberpass-vq-importer xlsx
+```
+
+See the package [README](./packages/cyberpass-vq-importer/README.md) for the integration snippet, API, workbook contract, error handling, build, and publishing instructions. Build it from this repository with `npm run build:library`.
+
 ## Debugging DOM detection
 
 The content adapter recognizes `.input-node-view-builder-header` text such as `Requirement 6.5` and searches its nearest `.input-node-view-builder-container` for `textarea`, text inputs, selects, and contenteditable controls. Its debug representation contains requirement IDs and control metadata (`tag`, `id`, `name`, `aria-label`) without field values, cookies, tokens, passwords, or unrelated page data.
