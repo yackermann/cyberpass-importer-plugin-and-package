@@ -10,7 +10,7 @@ export function installImportExcelButton(xlsx, options = {}) {
     button.textContent = options.buttonText ?? 'Import Excel VQ';
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = options.accept ?? '.xlsx,.xlsm';
+    input.accept = options.accept ?? '.xls,.xlsx,.xlsm,.xlsb';
     input.hidden = true;
     document.body.appendChild(input);
     const importer = new CyberPassVqImporter(document);

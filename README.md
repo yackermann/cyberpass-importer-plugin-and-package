@@ -4,12 +4,12 @@ A local-only Chrome/Edge Manifest V3 extension that restores the CyberPass vendo
 
 ## Install
 
-1. Run `npm install` in this directory to install the declared SheetJS `xlsx` dependency for future adapter expansion. The checked-in fallback reader keeps this build reproducible offline; no runtime network access is used.
+1. Run `npm install` in this directory to install the build tools. SheetJS 0.20.3 and its legacy character encodings are vendored locally; no runtime download is needed.
 2. Run `npm run build`.
 3. Open `chrome://extensions` (or `edge://extensions`), enable **Developer mode**, choose **Load unpacked**, and select this directory.
-4. Open a CyberPass assessment at the vendor-questionnaire step, click the extension, and drop a `.xlsx` or `.xlsm` workbook. The extension is inactive on all other sites and procedure steps.
+4. Open a CyberPass assessment at the vendor-questionnaire step, click the extension, and drop a `.xls`, `.xlsx`, `.xlsm`, or `.xlsb` workbook. The extension is inactive on all other sites and procedure steps.
 
-The bundled fallback reader handles OOXML `.xlsx`/`.xlsm` files locally and awaits asynchronous workbook decompression before parsing. Legacy `.xls`/`.xlsb` files are detected and reported so they are never silently misread; use `.xlsx`/`.xlsm` for this first build. The declared SheetJS dependency is ready for swapping in a full legacy-format adapter.
+The bundled full SheetJS reader handles legacy binary `.xls` workbooks (including Excel 97–2003), `.xlsx`, `.xlsm`, and `.xlsb` locally. Vendor Response text, line breaks, and international characters are preserved. Reader errors include the filename and are displayed in the popup. `npm test` exercises binary XLS imports and regression checks for the modern formats. See [vendor/sheetjs/README.md](./vendor/sheetjs/README.md) for provenance and license.
 
 ## Workflow
 

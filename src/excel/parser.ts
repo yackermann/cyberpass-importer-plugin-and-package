@@ -1,5 +1,6 @@
 import type { ExcelRequirement } from '../shared/types';
 import { normalizeRequirementId } from './normalizer';
+import XLSX from '../../vendor/xlsx.mjs';
 
 interface Cell { v?: unknown; w?: string; }
 interface SheetLike { '!ref'?: string; [key: string]: unknown; }
@@ -53,8 +54,11 @@ export async function readWorkbookFile(file: File): Promise<ExcelRequirement[]> 
     const raw=await file.text(); const delim=name.endsWith('.tsv')?'\t':','; const rows=raw.split(/\r?\n/).map(line=>line.split(delim));
     return parseWorkbook({SheetNames:['CSV'],Sheets:{CSV: rows.reduce((s,row,r)=>{row.forEach((v,c)=>{s[`${String.fromCharCode(65+c)}${r+1}`]={v,w:v};});return s;},{'!ref':`A1:${String.fromCharCode(64+(rows[0]?.length||1))}${rows.length}`} as SheetLike)}});
   }
-  const xlsx = (globalThis as any).XLSX;
-  if (!xlsx?.read) throw new Error('SheetJS runtime is missing. Run the build to bundle xlsx into vendor/xlsx.mjs.');
-  const workbook=await xlsx.read(await file.arrayBuffer(), {type:'array', cellText:true, cellDates:true});
-  return parseWorkbook(workbook);
+  try {
+    const workbook=await XLSX.read(await file.arrayBuffer(), {type:'array', cellText:true, cellDates:true});
+    return parseWorkbook(workbook);
+  } catch (error) {
+    const detail=error instanceof Error?error.message:String(error);
+    throw new Error(`Could not read workbook "${file.name}": ${detail}`);
+  }
 }

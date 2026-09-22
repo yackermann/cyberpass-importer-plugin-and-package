@@ -1,11 +1,9 @@
-import XLSX from '../../vendor/xlsx.mjs';
 import { readWorkbookFile } from '../excel/parser';
 import type { ExcelRequirement } from '../shared/types';
 const chromeApi:any=(globalThis as any).chrome;
 let requirements:ExcelRequirement[]=[]; let activeTab:any=null;
 const $=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T;
 const drop=$('dropZone'), input=$<HTMLInputElement>('fileInput'), dropPrompt=$('dropPrompt'), selectedFile=$('selectedFile'), selectedFileName=$('selectedFileName'), clearFile=$<HTMLButtonElement>('clearFile'), workbookCard=$('workbookCard'), fileName=$('fileName'), excelCount=$('excelCount'), status=$('status'), fillBtn=$<HTMLButtonElement>('fillBtn'), replace=$<HTMLInputElement>('replaceExisting'), overrideColour=$<HTMLInputElement>('overrideColour');
-(globalThis as any).XLSX=XLSX;
 function errorText(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === 'string') return error;
@@ -57,7 +55,6 @@ async function load(file:File){
     if(!isAllowedTab(activeTab)) throw new Error('Open the CyberPass vendor questionnaire URL before selecting a workbook.');
     procedureId=procedureIdForUrl(activeTab.url);
     if(!procedureId) throw new Error('Could not determine the CyberPass procedure ID.');
-    if(/\.xlsb?$/.test(file.name.toLowerCase())) setStatus('Legacy .xls/.xlsb files need a full SheetJS build; use .xlsx or .xlsm for this bundled reader.','error');
     const parsed=await readWorkbookFile(file);
     if(!parsed.length) throw new Error('No requirement rows detected. Check that the workbook contains a populated SR No. and Vendor Response column.');
     const response=await sendWorker({type:'STORE_WORKBOOK',procedureId,fileName:file.name,requirements:parsed});

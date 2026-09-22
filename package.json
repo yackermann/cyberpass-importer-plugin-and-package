@@ -7,13 +7,11 @@
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
     "build:library": "npm --prefix packages/cyberpass-vq-importer run build",
-    "typecheck:library": "npm --prefix packages/cyberpass-vq-importer run typecheck"
+    "typecheck:library": "npm --prefix packages/cyberpass-vq-importer run typecheck",
+    "test": "esbuild tests/excel.test.ts --bundle --platform=node --format=esm --outfile=.test-build/excel.test.mjs && node --test .test-build/excel.test.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.25.0",
     "typescript": "^5.7.0"
-  },
-  "dependencies": {
-    "xlsx": "^0.18.5"
   }
 }

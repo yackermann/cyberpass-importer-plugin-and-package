@@ -4,7 +4,7 @@ Browser-first TypeScript library for adding an **Import Excel VQ** workflow to a
 
 It provides:
 
-- Header-driven parsing of `.xlsx` and `.xlsm` workbooks through a caller-supplied SheetJS reader.
+- Header-driven parsing of `.xls`, `.xlsx`, `.xlsm`, and `.xlsb` workbooks through a caller-supplied SheetJS reader.
 - Normalized matching of `SR001`, `SR 1`, `Requirement 1.1`, and dotted requirement IDs.
 - The FIDO/CyberPass response rule: an empty Vendor Response selects **No**, content beginning with `N/A` selects **N/A**, and other content selects **Yes**.
 - A CyberPass DOM adapter that discovers lazy-loaded requirement cards, clicks the Ant Design response menu, fills the comment textarea, and reports mismatches and failures.
@@ -101,3 +101,5 @@ Before publishing, update the version in `package.json`, review the generated `d
 Made by **Yuriy Ackermann**.
 
 FIDO, FIDO Alliance, CyberPass, and related names, marks, and logos belong to their respective owners. This package is an independent, unofficial integration and is not sponsored, endorsed, administered by, or affiliated with FIDO Alliance, CyberPass, or their respective owners. No ownership of those trademarks is claimed by the author.
+
+Legacy `.xls` imports require a full SheetJS reader. If using the SheetJS ESM build, register its `cpexcel.full.mjs` tables with `set_cptable` for older workbook character encodings. The bundled reader in the browser extension already includes these tables.

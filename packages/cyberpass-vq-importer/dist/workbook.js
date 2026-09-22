@@ -87,7 +87,7 @@ export function parseVendorQuestionnaire(workbook) {
     }
     return [...deduplicated.values()];
 }
-/** Read and parse a local .xlsx/.xlsm file using the caller's SheetJS instance. */
+/** Read and parse a local .xls/.xlsx/.xlsm/.xlsb file using the caller's SheetJS instance. */
 export async function readVendorQuestionnaire(file, xlsx) {
     const workbook = await xlsx.read(await file.arrayBuffer(), { type: 'array', cellText: true, cellDates: true });
     return parseVendorQuestionnaire(workbook);
