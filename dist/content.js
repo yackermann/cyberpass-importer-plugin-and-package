@@ -285,33 +285,36 @@ function hideCommentSuggestion() {
 }
 function showCommentSuggestion(el, field, requirement) {
   hideCommentSuggestion();
-  if (!requirement.value || !document.body) return;
+  if (!document.body) return;
   const card = document.createElement("div");
   card.setAttribute("role", "dialog");
   card.setAttribute("aria-label", "Excel autofill suggestion");
-  card.style.cssText = "position:fixed;z-index:2147483646;width:300px;max-width:calc(100vw - 24px);padding:10px;background:#fff;border:1px solid #b8c9d8;border-radius:8px;box-shadow:0 5px 18px rgba(31,52,70,.18);font:12px system-ui;color:#243746;";
+  card.style.cssText = "position:fixed;z-index:2147483646;width:560px;max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);overflow:auto;padding:10px;background:#fff;border:1px solid #b8c9d8;border-radius:8px;box-shadow:0 5px 18px rgba(31,52,70,.18);font:12px system-ui;color:#243746;";
   const rect = el.getBoundingClientRect();
-  card.style.left = `${Math.max(12, Math.min(rect.left, window.innerWidth - 312))}px`;
-  card.style.top = `${Math.min(window.innerHeight - 100, rect.bottom + 6)}px`;
+  card.style.left = `${Math.max(12, Math.min(rect.left, window.innerWidth - 584))}px`;
   const heading = document.createElement("div");
   heading.textContent = `Requirement ${field.requirementId} \xB7 Vendor Response`;
   heading.style.cssText = "font-weight:700;margin-bottom:5px;";
   const value = document.createElement("div");
-  value.textContent = requirement.value;
+  value.textContent = requirement.value || "(empty Vendor Response \u2014 Response will be set to No)";
   value.title = requirement.value;
-  value.style.cssText = "color:#5d6b77;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:8px;";
+  value.style.cssText = "color:#5d6b77;white-space:pre-wrap;overflow-wrap:anywhere;margin-bottom:8px;";
   const fillButton = document.createElement("button");
   fillButton.type = "button";
-  fillButton.textContent = "Fill from Excel";
+  fillButton.textContent = requirement.value ? "Fill from Excel" : "Mark as No";
   fillButton.style.cssText = "display:block;margin-left:auto;border:0;border-radius:5px;padding:6px 9px;background:#246b9f;color:#fff;font:600 11px system-ui;cursor:pointer;";
   fillButton.addEventListener("click", async () => {
+    const current = readValue(el).trim();
+    if (current && requirement.value && current !== requirement.value.trim() && !confirm(`Requirement ${field.requirementId} already has a comment. Replace it with the Vendor Response from Excel?`)) return;
     await setAnswerChoice(field, desiredAnswer(requirement.value));
-    setNativeValue(el, requirement.value);
+    if (requirement.value) setNativeValue(el, requirement.value);
     mark(el, "ok");
     hideCommentSuggestion();
   });
   card.append(heading, value, fillButton);
   document.body.appendChild(card);
+  const maxTop = Math.max(12, window.innerHeight - card.getBoundingClientRect().height - 12);
+  card.style.top = `${Math.min(maxTop, Math.max(12, rect.bottom + 6))}px`;
   commentSuggestion = card;
   commentSuggestionAnchor = el;
 }
@@ -324,17 +327,7 @@ function refreshHelpers() {
       el.dataset.cyberpassCommentAutofill = "1";
       el.addEventListener("click", async () => {
         const requirement = helperRequirements.get(field.requirementId);
-        if (!requirement?.value) return;
-        const current = readValue(el);
-        if (!current.trim()) showCommentSuggestion(el, field, requirement);
-        else if (current.trim() !== requirement.value.trim()) {
-          hideCommentSuggestion();
-          if (confirm(`Requirement ${field.requirementId} already has a comment. Replace it with the Vendor Response from Excel?`)) {
-            await setAnswerChoice(field, desiredAnswer(requirement.value));
-            setNativeValue(el, requirement.value);
-            mark(el, "ok");
-          }
-        }
+        if (requirement) showCommentSuggestion(el, field, requirement);
       });
     }
     const parent = el.parentElement;
