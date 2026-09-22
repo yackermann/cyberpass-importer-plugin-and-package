@@ -19,33 +19,15 @@ The package is browser code and should be bundled with the CyberPass frontend. D
 
 ```ts
 import * as XLSX from 'xlsx';
-import {
-  installImportExcelButton,
-  type FillResult
-} from '@yuriy-ackermann/cyberpass-vq-importer';
-
-const status = document.querySelector<HTMLElement>('#import-excel-vq-status')!;
-const button = document.querySelector<HTMLButtonElement>('#import-excel-vq')!;
+import { installImportExcelButton } from '@yuriy-ackermann/cyberpass-vq-importer';
 
 installImportExcelButton(XLSX, {
-  button,
-  replaceExisting: false,
-  onLoaded: rows => {
-    status.textContent = `Loaded ${rows.length} workbook responses.`;
-  },
-  onFilled: (result: FillResult) => {
-    status.textContent = [
-      `Filled ${result.filled}`,
-      `skipped ${result.skipped}`,
-      `mismatches ${result.mismatches}`,
-      `failed ${result.failed}`
-    ].join('; ') + '.';
-  },
-  onError: error => {
-    status.textContent = `Excel import failed: ${error.message}`;
-  }
+  button: '#import-excel-vq',
+  status: '#import-excel-vq-status'
 });
 ```
+
+The library updates the status element automatically. Add `onLoaded`, `onFilled`, or `onError` only for custom notifications or telemetry.
 
 The button may be rendered beside the questionnaire header. If it is created after the questionnaire route mounts, call `installImportExcelButton` after the button exists.
 

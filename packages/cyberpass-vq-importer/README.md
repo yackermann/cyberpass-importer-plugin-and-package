@@ -24,23 +24,13 @@ npm install @yuriy-ackermann/cyberpass-vq-importer xlsx
 import * as XLSX from 'xlsx';
 import { installImportExcelButton } from '@yuriy-ackermann/cyberpass-vq-importer';
 
-const button = document.querySelector<HTMLButtonElement>('#import-excel-vq')!;
-
 installImportExcelButton(XLSX, {
-  button,
-  replaceExisting: false,
-  onLoaded: requirements => {
-    console.info(`Loaded ${requirements.length} Vendor Questionnaire rows`);
-  },
-  onFilled: result => {
-    console.info('VQ import result', result);
-  },
-  onError: error => {
-    // Display this in the CyberPass notification system.
-    console.error('VQ import failed', error);
-  }
+  button: '#import-excel-vq',
+  status: '#import-excel-vq-status'
 });
 ```
+
+The helper updates the status element as it loads and fills. Use `onLoaded`, `onFilled`, or `onError` only when the application needs additional telemetry or custom notifications. `button` and `status` may also receive the already queried DOM elements.
 
 The helper does not submit, save, or advance the procedure. It only updates the currently rendered questionnaire controls. It progressively scrolls the page to discover cards that CyberPass lazy-loads.
 

@@ -50,7 +50,8 @@ export interface FillResult {
 }
 export interface ImportExcelButtonOptions {
     document?: Document;
-    button?: HTMLButtonElement;
+    button?: HTMLButtonElement | string;
+    status?: HTMLElement | string;
     buttonText?: string;
     accept?: string;
     replaceExisting?: boolean;
