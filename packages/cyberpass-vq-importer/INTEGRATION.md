@@ -1,53 +1,71 @@
-# CyberPass integration handoff
+# Integrating the generic VQ importer
 
-This note is for the CyberPass application team integrating the library into the FIDO vendor-questionnaire step.
+CyberPass and other questionnaire platforms can use this package to decode a local Excel VQ into application data. It includes XLS/XLSX/XLSM/XLSB reading, requirement normalization, source locations, response prediction, and optional file input/drop-zone bindings.
 
-## 1. Add the package
-
-```bash
-npm install @yuriy-ackermann/cyberpass-vq-importer xlsx
-```
-
-The package is browser code and should be bundled with the CyberPass frontend. Do not load a package script from an arbitrary CDN.
-
-## 2. Add a button
-
-```html
-<button id="import-excel-vq" type="button">Import Excel VQ</button>
-<div id="import-excel-vq-status" role="status"></div>
-```
+## Minimal integration
 
 ```ts
-import * as XLSX from 'xlsx';
-import { installImportExcelButton } from '@yuriy-ackermann/cyberpass-vq-importer';
+import { importVq } from '@yuriy-ackermann/cyberpass-vq-importer';
 
-installImportExcelButton(XLSX, {
-  button: '#import-excel-vq',
-  status: '#import-excel-vq-status'
+const vq = await importVq(file);
+const rows = vq.rows;
+const requirement = vq.get('1.1');
+```
+
+A row has `requirementId`, `value`, `predictedResponse` (`YES` / `NO` / `N/A`), and its source worksheet/cell coordinates. The application decides how to map those into field names and answer enums.
+
+For example, a frontend might map the data into its own model:
+
+```ts
+const proposedChanges = vq.rows.map(row => ({
+  id: row.requirementId,
+  comment: row.value,
+  response: row.predictedResponse
+}));
+```
+
+`proposedChanges` is an ordinary array, not a patch format imposed by the library. The host owns matching against known requirements, highlighting conflicts, overwrite policy, form updates, validation, and persistence. Predictions describe the response text and should be reviewed according to the host's workflow.
+
+## Native file input
+
+In a framework event handler, pass the selected File to `importVq` and consume the promise. For plain DOM integration:
+
+```ts
+import { bindVqFileInput } from '@yuriy-ackermann/cyberpass-vq-importer';
+
+const unbind = bindVqFileInput(fileInput, {
+  onImport: vq => setImportedRows(vq.rows),
+  onError: error => showError(error.message)
 });
 ```
 
-The library updates the status element automatically. Add `onLoaded`, `onFilled`, or `onError` only for custom notifications or telemetry.
+`fileInput` is your existing `<input type="file">`. `setImportedRows` and `showError` are your application's functions. Call `unbind()` when the view unmounts.
 
-The button may be rendered beside the questionnaire header. If it is created after the questionnaire route mounts, call `installImportExcelButton` after the button exists.
+## Drag and drop
 
-## 3. Confirm behavior
+```ts
+import { bindVqDropzone } from '@yuriy-ackermann/cyberpass-vq-importer';
 
-Use a test procedure and verify:
+const unbind = bindVqDropzone(dropzone, {
+  onImport: vq => setImportedRows(vq.rows),
+  onError: error => showError(error.message)
+});
+```
 
-1. An empty Vendor Response selects `❌ No`.
-2. A response beginning with `N/A` selects `🚫 N/A` case-insensitively.
-3. Any other non-empty response selects `✅ Yes`.
-4. The Vendor Response text is inserted into the Comment field.
-5. Existing values remain unchanged by default and are counted as mismatches when different.
-6. `replaceExisting: true` requires an explicit product decision because it overwrites existing questionnaire values.
-7. The page may scroll while lazy-rendered requirements are discovered.
-8. No Save, Submit, or Next action is performed by the library.
+The element, labels, keyboard alternative, loading UI, and presentation belong to the host. This helper reads one dropped file and returns data. It does not inspect questionnaire controls, scroll, click dropdowns, write comments, or submit anything.
 
-## 4. Browser and data behavior
+## Receiving the package
 
-Workbook bytes are read in the browser by the host's SheetJS instance. The library does not upload the file, call a server, or persist workbook contents. The host controls any telemetry and should avoid logging workbook response text.
+Until it is published, install the archive provided by the author:
 
-## 5. Versioning
+```sh
+npm install ./yuriy-ackermann-cyberpass-vq-importer-0.2.0.tgz
+```
 
-Pin a package version in production. The adapter intentionally targets the current CyberPass questionnaire DOM contract: requirement headings, `.input-node-view-builder-container`, `.answer` response controls, and `.description` textareas. Update the package after any intentional DOM change and run the checklist above.
+Once published under the configured scope:
+
+```sh
+npm install @yuriy-ackermann/cyberpass-vq-importer
+```
+
+The package includes its Excel decoder, so importing a workbook needs only the package import shown above. Data stays in memory unless the host chooses to persist or transmit it. See the [README](./README.md) for workbook rules, duplicate handling, errors, all exports, and the version 0.1 migration.

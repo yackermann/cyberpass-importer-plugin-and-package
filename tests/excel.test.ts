@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import * as XLSX from '../vendor/sheetjs/xlsx.mjs';
+import * as XLSX from '../packages/cyberpass-vq-importer/vendor/sheetjs/xlsx.mjs';
 import reader from '../vendor/xlsx.mjs';
 import { readWorkbookFile } from '../src/excel/parser';
 import { readVendorQuestionnaire, responseChoice } from '../packages/cyberpass-vq-importer/src/workbook';
@@ -32,7 +32,9 @@ for (const [bookType, extension] of [
       ['1.1', response, 'B', 'I'], ['1.2', 'n/a - Unsupported', 'B', 'I'], ['1.3', '', 'B', 'I']
     ]);
     assert.deepEqual(requirements.map(row => responseChoice(row.value)), ['YES', 'N/A', 'NO']);
-    assert.deepEqual(await readVendorQuestionnaire(file, reader), requirements);
+    const importedRows = await readVendorQuestionnaire(file);
+    assert.deepEqual(importedRows, requirements.map(row => ({ ...row, predictedResponse: responseChoice(row.value) })));
+    assert.deepEqual(await readVendorQuestionnaire(file, { reader }), importedRows);
   });
 }
 

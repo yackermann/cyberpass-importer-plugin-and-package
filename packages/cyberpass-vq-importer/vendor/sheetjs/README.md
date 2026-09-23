@@ -6,7 +6,7 @@ Unmodified files from the [official release](https://cdn.sheetjs.com/xlsx-0.20.3
 - `cpexcel.full.mjs` comes from `package/dist/cpexcel.full.mjs` and supplies legacy character encodings.
 - `LICENSE` comes from `package/LICENSE` (Apache-2.0).
 
-`../xlsx.mjs` registers the codepage tables and exposes the reader. The extension bundles this code locally into `dist/popup.js`; files are never fetched at runtime. The published integration library continues to accept the host application's reader.
+`../reader.mjs` registers the codepage tables and exposes the reader. The extension bundles this code locally into `dist/popup.js`; files are never fetched at runtime. The generic import library includes this decoder by default and optionally accepts the host application's own reader.
 
 SHA-256:
 

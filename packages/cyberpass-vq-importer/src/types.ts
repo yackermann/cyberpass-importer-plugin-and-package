@@ -1,71 +1,35 @@
 export type ResponseChoice = 'YES' | 'NO' | 'N/A';
 
-export interface ExcelRequirement {
+/** One imported requirement, including its location in the original workbook. */
+export interface VqRow {
   requirementId: string;
   rawRequirementId: string;
   value: string;
+  predictedResponse: ResponseChoice;
   sheetName: string;
+  /** One-based Excel row. */
   row: number;
-  column?: string;
-  responseColumn?: string;
+  /** Excel column letters, e.g. B and I. */
+  column: string;
+  responseColumn: string;
 }
-
+export type ExcelRequirement = VqRow;
+export interface SheetLike { [cell: string]: unknown; }
 export interface WorkbookLike {
   SheetNames: string[];
   Sheets: Record<string, SheetLike>;
 }
-
-export interface SheetLike {
-  '!ref'?: string;
-  [cell: string]: unknown;
-}
-
 export interface XlsxReader {
   read(data: ArrayBuffer | Uint8Array, options?: Record<string, unknown>): WorkbookLike | Promise<WorkbookLike>;
 }
-
-export interface CyberPassControl {
-  tag: string;
-  type?: string;
-  name?: string;
-  id?: string;
-  ariaLabel?: string;
-  value?: string;
+export type VqInput = Blob | ArrayBuffer | Uint8Array;
+export interface ParseOptions {
+  /** Process only these worksheets. Default: all worksheets with VQ headers. */
+  sheetNames?: readonly string[];
+  /** Repeated normalized IDs fail by default. Explicitly select first/last if needed. */
+  duplicates?: 'error' | 'first' | 'last';
 }
-
-export interface CyberPassField {
-  requirementId: string;
-  label?: string;
-  containerText: string;
-  controls: CyberPassControl[];
-}
-
-export interface ScanResult {
-  fields: CyberPassField[];
-}
-
-export interface FillOptions {
-  replaceExisting?: boolean;
-  /** Scroll the page while discovering lazy-rendered requirement cards. */
-  discoverLazyRequirements?: boolean;
-}
-
-export interface FillResult {
-  filled: number;
-  skipped: number;
-  failed: number;
-  mismatches: number;
-  errors: string[];
-}
-
-export interface ImportExcelButtonOptions {
-  document?: Document;
-  button?: HTMLButtonElement | string;
-  status?: HTMLElement | string;
-  buttonText?: string;
-  accept?: string;
-  replaceExisting?: boolean;
-  onLoaded?: (requirements: ExcelRequirement[]) => void;
-  onFilled?: (result: FillResult) => void;
-  onError?: (error: Error) => void;
+export interface ImportOptions extends ParseOptions {
+  /** Optional alternative to the included SheetJS decoder. */
+  reader?: XlsxReader;
 }

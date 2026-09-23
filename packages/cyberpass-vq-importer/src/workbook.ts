@@ -1,103 +1,83 @@
 import { normalizeRequirementId } from './normalizer.js';
-import type { ExcelRequirement, SheetLike, WorkbookLike, XlsxReader } from './types.js';
-
-interface Cell { v?: unknown; w?: string; }
+import { VqImportError } from './errors.js';
+import type { ImportOptions, ParseOptions, ResponseChoice, SheetLike, VqInput, VqRow, WorkbookLike } from './types.js';
 
 function text(value: unknown): string {
   return value == null ? '' : String(value).replace(/\u00a0/g, ' ').trim();
 }
-
-function columnName(ref: string): string {
-  return (ref.match(/^[A-Z]+/i)?.[0] ?? '').toUpperCase();
+function header(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
+const requirementHeaders = new Set(['sr', 'sr no', 'sr number', 'sr id', 'sar', 'sar no', 'requirement', 'requirement id', 'requirement no', 'requirement number']);
+const responseHeaders = ['vendor response', 'response', 'answer', 'rationale'];
 
-function columnNumber(ref: string): number {
-  let number = 0;
-  for (const character of columnName(ref)) number = number * 26 + character.charCodeAt(0) - 64;
-  return number;
-}
-
-function rowNumber(ref: string): number {
-  return Number(ref.match(/\d+/)?.[0] ?? 0);
-}
-
-function sheetToRows(sheet: SheetLike): { rows: string[][]; refs: string[][] } {
-  const cells = Object.keys(sheet).filter(key => !key.startsWith('!'));
-  const maxRow = Math.max(0, ...cells.map(rowNumber));
-  const maxColumn = Math.max(0, ...cells.map(columnNumber));
-  const rows = Array.from({ length: maxRow }, () => Array(maxColumn).fill('')) as string[][];
-  const refs = Array.from({ length: maxRow }, () => Array(maxColumn).fill('')) as string[][];
-  for (const ref of cells) {
-    const cell = sheet[ref] as Cell | undefined;
-    const row = rowNumber(ref) - 1;
-    const column = columnNumber(ref) - 1;
-    if (row < 0 || column < 0) continue;
-    rows[row][column] = text(cell?.w ?? cell?.v);
-    refs[row][column] = ref;
+// Sparse iteration avoids allocating the worksheet's entire used rectangle.
+function sheetRows(sheet: SheetLike): Map<number, Map<string, string>> {
+  const rows = new Map<number, Map<string, string>>();
+  for (const [address, raw] of Object.entries(sheet)) {
+    const match = /^([A-Z]+)([1-9]\d*)$/i.exec(address);
+    if (!match || !raw || typeof raw !== 'object') continue;
+    const cell = raw as { v?: unknown; w?: string };
+    const rowNumber = Number(match[2]);
+    let row = rows.get(rowNumber);
+    if (!row) rows.set(rowNumber, row = new Map());
+    row.set(match[1].toUpperCase(), text(cell.w ?? cell.v));
   }
-  return { rows, refs };
+  return new Map([...rows].sort(([a], [b]) => a - b));
 }
 
-const requirementHeader = /sr\s*(?:no|number)|requirement\s*(?:id|no|number)/i;
-const responseHeader = /vendor\s*response|response|answer|rationale/i;
+/** Deterministic prediction from Vendor Response text; no compliance assessment. */
+export function responseChoice(value: string): ResponseChoice {
+  return value.trimStart().toLowerCase().startsWith('n/a') ? 'N/A' : value.trim() ? 'YES' : 'NO';
+}
 
-/** Parse a SheetJS-compatible workbook into normalized CyberPass requirements. */
-export function parseVendorQuestionnaire(workbook: WorkbookLike): ExcelRequirement[] {
-  const output: ExcelRequirement[] = [];
-  for (const sheetName of workbook.SheetNames ?? []) {
+/** Extract rows only from sheets containing both a requirement and response header. */
+export function parseVendorQuestionnaire(workbook: WorkbookLike, options: ParseOptions = {}): VqRow[] {
+  const result = new Map<string, VqRow>();
+  for (const sheetName of options.sheetNames ?? workbook.SheetNames) {
     const sheet = workbook.Sheets[sheetName];
-    if (!sheet) continue;
-    const { rows, refs } = sheetToRows(sheet);
-    if (!rows.length) continue;
-    const header = rows.slice(0, Math.min(12, rows.length)).find(row => row.some(value => requirementHeader.test(value) || responseHeader.test(value))) ?? rows[0];
-    const requirementColumn = header.findIndex(value => requirementHeader.test(value));
-    const responseColumn = header.findIndex(value => responseHeader.test(value));
-    for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
-      const row = rows[rowIndex];
-      let raw = requirementColumn >= 0 ? text(row[requirementColumn]) : '';
-      let requirementColumnIndex = requirementColumn;
-      if (!raw) {
-        for (let column = 0; column < row.length; column++) {
-          if (normalizeRequirementId(row[column])) {
-            raw = text(row[column]);
-            requirementColumnIndex = column;
-            break;
-          }
+    if (!sheet) throw new VqImportError('SHEET_NOT_FOUND', `Worksheet "${sheetName}" was not found.`);
+    let columns: { requirement: string; response: string } | undefined;
+    for (const [rowNumber, cells] of sheetRows(sheet)) {
+      const entries = [...cells];
+      const requirementColumn = entries.find(([, value]) => requirementHeaders.has(header(value)))?.[0];
+      // Prefer Vendor Response even if Answer or Response appears earlier.
+      const responseColumn = responseHeaders.map(label => entries.find(([, value]) => header(value) === label)?.[0]).find(Boolean);
+      if (requirementColumn && responseColumn) {
+        columns = { requirement: requirementColumn, response: responseColumn };
+        continue;
+      }
+      if (!columns) continue;
+      const rawRequirementId = cells.get(columns.requirement) ?? '';
+      const requirementId = normalizeRequirementId(rawRequirementId);
+      if (!requirementId) continue;
+      const value = cells.get(columns.response) ?? '';
+      const item: VqRow = { requirementId, rawRequirementId, value, predictedResponse: responseChoice(value), sheetName, row: rowNumber, column: columns.requirement, responseColumn: columns.response };
+      const previous = result.get(requirementId);
+      if (previous) {
+        if (options.duplicates === 'first') continue;
+        if (options.duplicates !== 'last') {
+          throw new VqImportError('DUPLICATE_REQUIREMENT', `Requirement ${requirementId} appears at ${previous.sheetName}!${previous.column}${previous.row} and ${sheetName}!${columns.requirement}${rowNumber}. Select a worksheet or an explicit duplicate policy.`);
         }
       }
-      const requirementId = normalizeRequirementId(raw);
-      if (!requirementId || rowIndex < 1) continue;
-      let value = responseColumn >= 0 ? text(row[responseColumn]) : '';
-      if (responseColumn < 0) {
-        const candidates = row.map((cell, column) => ({ value: text(cell), column }))
-          .filter(item => item.column !== requirementColumnIndex && item.value);
-        value = candidates.at(-1)?.value ?? '';
-      }
-      output.push({
-        requirementId,
-        rawRequirementId: raw,
-        value,
-        sheetName,
-        row: rowIndex + 1,
-        column: refs[rowIndex]?.[requirementColumnIndex] ? columnName(refs[rowIndex][requirementColumnIndex]) : undefined,
-        responseColumn: responseColumn >= 0 ? columnName(refs[rowIndex]?.[responseColumn] ?? '') : undefined
-      });
+      result.set(requirementId, item);
     }
   }
-  const deduplicated = new Map<string, ExcelRequirement>();
-  for (const item of output) {
-    const previous = deduplicated.get(item.requirementId);
-    if (!previous || (!previous.value && item.value)) deduplicated.set(item.requirementId, item);
+  if (!result.size) throw new VqImportError('NO_REQUIREMENTS', 'No requirement rows detected. Expected SR No. (or Requirement ID) and Vendor Response headers on the same row.');
+  return [...result.values()];
+}
+
+/** Decode a local File/Blob, ArrayBuffer, or Uint8Array into plain VQ rows. */
+export async function readVendorQuestionnaire(input: VqInput, options: ImportOptions = {}): Promise<VqRow[]> {
+  let workbook: WorkbookLike;
+  try {
+    const bytes = 'arrayBuffer' in input ? await input.arrayBuffer() : input;
+    const reader = options.reader ?? (await import('../vendor/reader.mjs')).default;
+    workbook = await reader.read(bytes, { type: 'array', cellText: true, cellDates: true });
+  } catch (cause) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    const name = 'name' in input ? ` "${String(input.name)}"` : '';
+    throw new VqImportError('READ_FAILED', `Could not read workbook${name}: ${detail}`, { cause });
   }
-  return [...deduplicated.values()];
-}
-
-/** Read and parse a local .xls/.xlsx/.xlsm/.xlsb file using the caller's SheetJS instance. */
-export async function readVendorQuestionnaire(file: Blob, xlsx: XlsxReader): Promise<ExcelRequirement[]> {
-  const workbook = await xlsx.read(await file.arrayBuffer(), { type: 'array', cellText: true, cellDates: true });
-  return parseVendorQuestionnaire(workbook);
-}
-
-export function responseChoice(value: string): 'YES' | 'NO' | 'N/A' {
-  return /^\s*n\/a\b/i.test(value) ? 'N/A' : value.trim() ? 'YES' : 'NO';
+  return parseVendorQuestionnaire(workbook, options);
 }

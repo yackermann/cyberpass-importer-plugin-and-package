@@ -9,7 +9,7 @@ A local-only Chrome/Edge Manifest V3 extension that restores the CyberPass vendo
 3. Open `chrome://extensions` (or `edge://extensions`), enable **Developer mode**, choose **Load unpacked**, and select this directory.
 4. Open a CyberPass assessment at the vendor-questionnaire step, click the extension, and drop a `.xls`, `.xlsx`, `.xlsm`, or `.xlsb` workbook. The extension is inactive on all other sites and procedure steps.
 
-The bundled full SheetJS reader handles legacy binary `.xls` workbooks (including Excel 97–2003), `.xlsx`, `.xlsm`, and `.xlsb` locally. Vendor Response text, line breaks, and international characters are preserved. Reader errors include the filename and are displayed in the popup. `npm test` exercises binary XLS imports and regression checks for the modern formats. See [vendor/sheetjs/README.md](./vendor/sheetjs/README.md) for provenance and license.
+The bundled full SheetJS reader handles legacy binary `.xls` workbooks (including Excel 97–2003), `.xlsx`, `.xlsm`, and `.xlsb` locally. Vendor Response text, line breaks, and international characters are preserved. Reader errors include the filename and are displayed in the popup. `npm test` exercises binary XLS imports and regression checks for the modern formats. See [packages/cyberpass-vq-importer/vendor/sheetjs/README.md](./packages/cyberpass-vq-importer/vendor/sheetjs/README.md) for provenance and license.
 
 ## Workflow
 
@@ -34,15 +34,19 @@ The bundled full SheetJS reader handles legacy binary `.xls` workbooks (includin
 - `src/popup/*` — file drop, preview, controls, sanitized debug export.
 - `src/shared/*` — shared types and messages.
 
-## Reusable CyberPass integration library
+## Generic VQ import library
 
-The publishable package in [`packages/cyberpass-vq-importer`](./packages/cyberpass-vq-importer) exposes the workbook parser and the browser DOM adapter for CyberPass itself. It is designed so CyberPass can add a native **Import Excel VQ** button without adopting the extension UI or Chrome APIs.
+The package in [`packages/cyberpass-vq-importer`](./packages/cyberpass-vq-importer) reads Excel workbooks into typed requirement rows. It includes its decoder and returns each requirement ID, response text, predicted YES/NO/N/A, and source coordinates. It has no questionnaire DOM adapter. The browser extension above owns CyberPass page automation separately.
 
-```bash
-npm install @yuriy-ackermann/cyberpass-vq-importer xlsx
+```ts
+import { importVq } from '@yuriy-ackermann/cyberpass-vq-importer';
+
+const vq = await importVq(file);
+const rows = vq.rows;
+const requirement = vq.get('1.1');
 ```
 
-See the package [README](./packages/cyberpass-vq-importer/README.md) for the integration snippet, API, workbook contract, error handling, build, and publishing instructions. Build it from this repository with `npm run build:library`.
+CyberPass or any host can map these rows into its own form state. Optional file input and drop-zone bindings deliver the same data. See the package [README](./packages/cyberpass-vq-importer/README.md) and [integration handoff](./packages/cyberpass-vq-importer/INTEGRATION.md). Build with `npm run build:library`.
 
 ## Debugging DOM detection
 

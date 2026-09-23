@@ -1,95 +1,179 @@
-# `@yuriy-ackermann/cyberpass-vq-importer`
+# Vendor Questionnaire importer
 
-Browser-first TypeScript library for adding an **Import Excel VQ** workflow to a FIDO CyberPass vendor questionnaire.
+`@yuriy-ackermann/cyberpass-vq-importer` imports standardized VQ Excel workbooks into typed data. The name is retained for continuity; the package works independently of CyberPass and any frontend framework.
 
-It provides:
-
-- Header-driven parsing of `.xls`, `.xlsx`, `.xlsm`, and `.xlsb` workbooks through a caller-supplied SheetJS reader.
-- Normalized matching of `SR001`, `SR 1`, `Requirement 1.1`, and dotted requirement IDs.
-- The FIDO/CyberPass response rule: an empty Vendor Response selects **No**, content beginning with `N/A` selects **N/A**, and other content selects **Yes**.
-- A CyberPass DOM adapter that discovers lazy-loaded requirement cards, clicks the Ant Design response menu, fills the comment textarea, and reports mismatches and failures.
-- `installImportExcelButton`, a small integration helper that mounts a file picker button on an existing page.
+Import a file, iterate its requirement rows, or look up a requirement by ID. Each row includes the Vendor Response text and a deterministic Yes/No/N/A prediction. The host application owns review, field mapping, form updates, and saving.
 
 ## Install
 
-```bash
-npm install @yuriy-ackermann/cyberpass-vq-importer xlsx
+After publishing (or install a locally packed `.tgz`):
+
+```sh
+npm install @yuriy-ackermann/cyberpass-vq-importer
 ```
 
-`xlsx` is a peer dependency because the host application chooses how to bundle or load its workbook reader.
+The package includes SheetJS 0.20.3 with legacy character encodings. No separate `xlsx` install, global variable, or reader configuration is required. The decoder loads on the first file import. Supported Excel formats: `.xls`, `.xlsx`, `.xlsm`, `.xlsb`. Files are processed locally; the package has no upload or persistence behavior.
 
-## Quick integration
+## Import and use the data
 
 ```ts
-import * as XLSX from 'xlsx';
-import { installImportExcelButton } from '@yuriy-ackermann/cyberpass-vq-importer';
+import { importVq } from '@yuriy-ackermann/cyberpass-vq-importer';
 
-installImportExcelButton(XLSX, {
-  button: '#import-excel-vq',
-  status: '#import-excel-vq-status'
+const vq = await importVq(file);
+
+const rows = vq.rows;
+const requirement = vq.get('1.1'); // VqRow | undefined
+
+for (const { requirementId, value, predictedResponse } of vq) {
+  // Apply these values through your application's own state/form API.
+}
+```
+
+`file` can be a browser `File`/`Blob`, an `ArrayBuffer`, or a `Uint8Array` (including a Node.js Buffer). The core importer works without a DOM.
+
+Example row:
+
+```ts
+{
+  requirementId: '1.1',
+  rawRequirementId: 'SR 1.1',
+  value: 'N/A — this feature is not supported.',
+  predictedResponse: 'N/A',
+  sheetName: 'FIDO Security Requirements',
+  row: 4,
+  column: 'B',
+  responseColumn: 'I'
+}
+```
+
+`row` is a one-based Excel row number. Columns are Excel letters. `.get('SR 001.01')` and `.get('1.1')` look up the same normalized ID. The document's rows are immutable. To get a mutable plain array instead:
+
+```ts
+import { readVendorQuestionnaire } from '@yuriy-ackermann/cyberpass-vq-importer';
+
+const rows = await readVendorQuestionnaire(file);
+```
+
+## Response prediction
+
+| Vendor Response text | `predictedResponse` |
+| --- | --- |
+| Starts with `N/A`, ignoring case and leading whitespace | `N/A` |
+| Any other non-empty content | `YES` |
+| Empty or whitespace only | `NO` |
+
+This is a text-based suggestion, not a compliance assessment. Even the literal text `No` is non-empty and predicts `YES`, following the import rule. Use `responseChoice(value)` to apply this rule independently.
+
+## File input and drag and drop
+
+Use the importer directly in your framework's event handler, or bind existing elements:
+
+```ts
+import {
+  bindVqFileInput,
+  bindVqDropzone,
+  type VqFileEvents
+} from '@yuriy-ackermann/cyberpass-vq-importer';
+
+// fileInput and dropzone are elements owned by your application.
+// setImportedRows and showError are your application's callbacks.
+const events: VqFileEvents = {
+  onImport: vq => setImportedRows(vq.rows),
+  onError: error => showError(error.message)
+};
+
+const unbindInput = bindVqFileInput(fileInput, events);
+const unbindDrop = bindVqDropzone(dropzone, events);
+
+// When your view unmounts:
+unbindInput();
+unbindDrop();
+```
+
+The helpers accept one file at a time, pass `VqDocument` and the original `File` to `onImport`, and report failures through the required `onError`. They do not render UI or set application fields. Provide a visible file input or accessible button as a keyboard alternative to dropping a file.
+
+The input helper sets the accepted extensions if none were specified and resets the input so the same file can be selected again. The drop helper handles only file drops on its element. Each binding suppresses results from an older pending import when a new file arrives; unbinding removes listeners and suppresses pending callbacks. Separate bindings are independent. Callbacks already running are not canceled.
+
+## Workbook mapping and options
+
+Worksheets must contain a header row with both a requirement column and response column. The parser recognizes `SR No.`, `SR Number`, `SR ID`, `SR`, `SAR`, `SAR No.`, `Requirement`, `Requirement ID`, `Requirement No.`, or `Requirement Number`. Header matching ignores case and punctuation.
+
+`Vendor Response` takes precedence over `Response`, `Answer`, and `Rationale`. Rows before the header, blank requirement IDs, non-ID prose, and sheets without paired headers are ignored. Repeated header rows are supported. The parser never substitutes requirement description text for a missing response column. An empty response cell for a valid requirement remains an imported row with a `NO` prediction.
+
+Cell display text is used when available, with raw values as fallback. Surrounding whitespace is trimmed and nonbreaking spaces become spaces; internal line breaks and Unicode are retained. Formula results use cached workbook values; formulas and macros are not executed. Formatting, images, attachments, and requirement prose are not included in the returned rows.
+
+```ts
+const vq = await importVq(file, {
+  sheetNames: ['FIDO Security Requirements'],
+  duplicates: 'error' // default; alternatives: 'first' or 'last'
 });
 ```
 
-The helper updates the status element as it loads and fills. Use `onLoaded`, `onFilled`, or `onError` only when the application needs additional telemetry or custom notifications. `button` and `status` may also receive the already queried DOM elements.
+Repeated normalized IDs raise an error with both source locations by default. Select worksheets or an explicit duplicate policy when a workbook intentionally repeats IDs. These options also work with `parseVendorQuestionnaire` and `readVendorQuestionnaire`; browser helpers accept them under `events.options`.
 
-The helper does not submit, save, or advance the procedure. It only updates the currently rendered questionnaire controls. It progressively scrolls the page to discover cards that CyberPass lazy-loads.
+An optional `reader` in `ImportOptions` accepts a SheetJS-compatible sync or async decoder. It replaces the built-in decoder for that call. Use `parseVendorQuestionnaire(workbook, options)` if the application already has a decoded workbook.
 
-## Separate parsing and filling
-
-For applications that want their own button and confirmation flow:
+## Errors
 
 ```ts
-import * as XLSX from 'xlsx';
-import {
-  CyberPassVqImporter,
-  readVendorQuestionnaire,
-  responseChoice
-} from '@yuriy-ackermann/cyberpass-vq-importer';
+import { importVq, VqImportError } from '@yuriy-ackermann/cyberpass-vq-importer';
 
-const requirements = await readVendorQuestionnaire(file, XLSX);
-const importer = new CyberPassVqImporter(document);
-const fields = await importer.scan();
-const result = await importer.fill(requirements, { replaceExisting: false });
+try {
+  const vq = await importVq(file);
+  setImportedRows(vq.rows);
+} catch (error) {
+  if (error instanceof VqImportError) {
+    showError(error.message); // error.code is available for custom handling
+  } else {
+    throw error;
+  }
+}
 ```
 
-`result.errors` contains field-specific messages such as `1.6: could not set Response to N/A`. Existing non-empty values are skipped and counted in `mismatches` unless `replaceExisting: true` is explicitly used.
+| Code | Meaning |
+| --- | --- |
+| `READ_FAILED` | Workbook could not be decoded/read; original error in `cause` |
+| `NO_REQUIREMENTS` | No rows under recognized paired headers |
+| `DUPLICATE_REQUIREMENT` | Repeated normalized requirement ID |
+| `SHEET_NOT_FOUND` | Requested worksheet missing |
+| `FILE_COUNT` | A browser helper received multiple files |
 
-## Workbook contract
+Password-encrypted files require an unencrypted copy. Host applications decide how errors and predictions are presented to users.
 
-The parser searches the first 12 rows of every worksheet for headers matching:
+## API
 
-- Requirement: `SR No.`, `SR Number`, `Requirement`, `Requirement ID`, or equivalent.
-- Response: `Vendor Response`, `Response`, `Answer`, or `Rationale`.
+| Export | Result |
+| --- | --- |
+| `importVq(input, options?)` | `Promise<VqDocument>` with `.rows`, `.get(id)`, iteration |
+| `readVendorQuestionnaire(input, options?)` | `Promise<VqRow[]>` |
+| `parseVendorQuestionnaire(workbook, options?)` | `VqRow[]` |
+| `normalizeRequirementId(value)` | Normalized string or `null` |
+| `responseChoice(value)` | `YES`, `NO`, or `N/A` |
+| `bindVqFileInput(element, events)` | Cleanup function |
+| `bindVqDropzone(element, events)` | Cleanup function |
+| `VQ_FILE_ACCEPT` | File input accept string |
+| `VqImportError` | Error class with stable code |
 
-The parser returns one normalized row per requirement. Duplicate IDs are deduplicated, preferring a row with a non-empty response. A workbook with no recognized rows returns an empty array so the host can show a useful error.
+## Migration from 0.1
 
-## CyberPass page contract
+Version 0.2 removes `CyberPassVqImporter`, `installImportExcelButton`, and the DOM/form-specific types and behavior. Replace them with `importVq` or file event helpers, then map `vq.rows` into your application's state. A custom reader is now passed as `{ reader: XLSX }`, not as a positional argument. Rows include `predictedResponse`. Missing headers and duplicate IDs now produce explicit errors.
 
-The adapter is intended for the FIDO CyberPass questionnaire step. It recognizes headings such as `.input-node-view-builder-header` containing `Requirement 1.1`, then uses the nearest `.input-node-view-builder-container`. It expects:
-
-- A response control whose ID ends in `.answer`.
-- An editable comment control, normally the textarea whose ID ends in `.description`.
-- Ant Design response options labelled `✅ Yes`, `❌ No`, and `🚫 N/A` (native `<select>` controls are also supported).
-
-If CyberPass changes these DOM contracts, the host should pin the package version and update the adapter after testing the new rendered HTML.
-
-## Building and publishing
+## Build and publish
 
 From this package directory:
 
-```bash
+```sh
 npm install
 npm run typecheck
-npm run build
-npm publish --access public
+npm test
+npm pack --dry-run
+npm pack
 ```
 
-Before publishing, update the version in `package.json`, review the generated `dist/` files, and run the integration against a test CyberPass procedure. The package is browser code; bundle it with the CyberPass application rather than loading it from an untrusted CDN.
+`npm test` builds the package and tests its public API. `npm pack` creates an installable archive to send to an integration team. To publish, confirm you control the npm scope in `package.json` (or change it), then run `npm publish --access public`. The package is ESM with TypeScript declarations. See [INTEGRATION.md](./INTEGRATION.md) for the application handoff.
 
 ## Attribution and trademark notice
 
-Made by **Yuriy Ackermann**.
+Made by **Yuriy Ackermann**. Package code is MIT licensed. The included SheetJS decoder has its own Apache-2.0 license in `vendor/sheetjs/LICENSE`.
 
-FIDO, FIDO Alliance, CyberPass, and related names, marks, and logos belong to their respective owners. This package is an independent, unofficial integration and is not sponsored, endorsed, administered by, or affiliated with FIDO Alliance, CyberPass, or their respective owners. No ownership of those trademarks is claimed by the author.
-
-Legacy `.xls` imports require a full SheetJS reader. If using the SheetJS ESM build, register its `cpexcel.full.mjs` tables with `set_cptable` for older workbook character encodings. The bundled reader in the browser extension already includes these tables.
+FIDO, FIDO Alliance, CyberPass, and related names, marks, and logos belong to their respective owners. This is an independent, unofficial tool, not sponsored, endorsed, or affiliated with FIDO Alliance or CyberPass. No ownership of those trademarks is claimed by the author.

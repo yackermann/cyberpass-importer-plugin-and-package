@@ -19,7 +19,7 @@ function normalizeRequirementId(input2) {
   }).join(".");
 }
 
-// vendor/sheetjs/xlsx.mjs
+// packages/cyberpass-vq-importer/vendor/sheetjs/xlsx.mjs
 var XLSX = {};
 XLSX.version = "0.20.3";
 var current_codepage = 1200;
@@ -26405,7 +26405,7 @@ function book_append_sheet(wb, ws, name, roll) {
 }
 var version = XLSX.version;
 
-// vendor/sheetjs/cpexcel.full.mjs
+// packages/cyberpass-vq-importer/vendor/sheetjs/cpexcel.full.mjs
 var cpexcel_full_exports = {};
 __export(cpexcel_full_exports, {
   cptable: () => cptable,
@@ -29681,10 +29681,10 @@ var hascp = function hascp2(cp) {
 };
 var utils = { decode, encode, hascp, magic, cache };
 
-// vendor/xlsx.mjs
+// packages/cyberpass-vq-importer/vendor/reader.mjs
 set_cptable(cpexcel_full_exports);
 var XLSX2 = { read: readSync };
-var xlsx_default = XLSX2;
+var reader_default = XLSX2;
 
 // src/excel/parser.ts
 function text(v) {
@@ -29771,7 +29771,7 @@ async function readWorkbookFile(file) {
     }, { "!ref": `A1:${String.fromCharCode(64 + (rows[0]?.length || 1))}${rows.length}` }) } });
   }
   try {
-    const workbook = await xlsx_default.read(await file.arrayBuffer(), { type: "array", cellText: true, cellDates: true });
+    const workbook = await reader_default.read(await file.arrayBuffer(), { type: "array", cellText: true, cellDates: true });
     return parseWorkbook(workbook);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);

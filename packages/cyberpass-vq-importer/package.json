@@ -1,16 +1,32 @@
 {
   "name": "@yuriy-ackermann/cyberpass-vq-importer",
-  "version": "0.1.0",
-  "description": "Browser TypeScript library for importing FIDO CyberPass Vendor Questionnaire Excel responses into the CyberPass questionnaire UI.",
-  "keywords": ["cyberpass", "fido", "vendor-questionnaire", "excel", "xlsx", "typescript", "browser"],
+  "version": "0.2.0",
+  "description": "Import standardized Vendor Questionnaire Excel files into typed requirement rows with response predictions, ID lookup, and optional file-input and drag-and-drop helpers.",
+  "keywords": [
+    "vq",
+    "fido",
+    "vendor-questionnaire",
+    "excel",
+    "xls",
+    "typescript",
+    "parser"
+  ],
   "license": "MIT",
   "author": "Yuriy Ackermann",
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "./vendor/reader.mjs"
+  ],
   "publishConfig": {
     "access": "public"
   },
-  "files": ["dist", "README.md", "INTEGRATION.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "INTEGRATION.md",
+    "LICENSE",
+    "vendor"
+  ],
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -22,14 +38,13 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "build": "node scripts/clean.mjs && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "prepack": "npm run build"
   },
   "devDependencies": {
     "typescript": "^5.7.0"
-  },
-  "peerDependencies": {
-    "xlsx": ">=0.18.0"
   },
   "engines": {
     "node": ">=18"
