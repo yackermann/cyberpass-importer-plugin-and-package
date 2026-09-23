@@ -25,7 +25,8 @@
     "README.md",
     "INTEGRATION.md",
     "LICENSE",
-    "vendor"
+    "vendor",
+    "examples"
   ],
   "main": "./dist/index.js",
   "module": "./dist/index.js",

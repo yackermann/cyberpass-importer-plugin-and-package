@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VQ importer · Example</title>
+  <style>
+    :root { color-scheme: light; font: 16px/1.55 system-ui, sans-serif; color: #21332e; background: #f4f6f3; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 1120px; margin: auto; padding: 48px 24px; }
+    header { margin-bottom: 28px; }
+    .eyebrow { color: #53685e; font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { margin: 8px 0; font-size: clamp(28px, 5vw, 40px); letter-spacing: -.035em; }
+    h2 { font-size: 18px; margin: 0 0 12px; }
+    p { margin: 6px 0 14px; }
+    .muted, small { color: #53685e; }
+    .panel { background: white; border: 1px solid #d9e2db; border-radius: 16px; padding: 24px; margin-bottom: 20px; }
+    #dropzone { border: 2px dashed #a5bbac; text-align: center; padding: 36px 20px; transition: background .15s; }
+    #dropzone.dragging { background: #e8f3ed; border-color: #1c6849; }
+    #dropzone[aria-busy="true"] { opacity: .7; }
+    button, .file-button { display: inline-block; font: inherit; font-weight: 600; border: 1px solid #c1d2c7; border-radius: 8px; background: white; color: #244d3a; padding: 9px 16px; cursor: pointer; }
+    button:hover, .file-button:hover { background: #eef5f0; }
+    .file-button { background: #225b42; color: white; border-color: #225b42; }
+    .file-button:hover { background: #184832; }
+    button:disabled { opacity: .5; cursor: wait; }
+    :focus-visible { outline: 3px solid #268552; outline-offset: 3px; }
+    .file-button:focus-within { outline: 3px solid #268552; outline-offset: 3px; }
+    .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; align-items: center; margin: 20px 0 12px; }
+    #status { margin: 16px 0 20px; overflow-wrap: anywhere; }
+    #status[data-kind="error"] { color: #a12828; }
+    .toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+    .toolbar h2 { margin-bottom: 2px; }
+    .toolbar .actions { margin: 0; }
+    #file-name { overflow-wrap: anywhere; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; text-align: left; }
+    caption { text-align: left; padding-bottom: 12px; font-size: 13px; color: #53685e; }
+    th { color: #53685e; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+    th, td { padding: 14px 12px; border-bottom: 1px solid #e5ebe6; vertical-align: top; }
+    td.response { min-width: 230px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    td.source { font-size: 12px; min-width: 150px; overflow-wrap: anywhere; }
+    .badge { display: inline-block; border-radius: 5px; padding: 2px 8px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+    .yes { color: #18553c; background: #e2f3e9; }
+    .no { color: #8a3731; background: #fbe9e6; }
+    .na { color: #475568; background: #ecf0f6; }
+    input[type="search"] { font: inherit; display: block; width: min(100%, 360px); padding: 10px 12px; border: 1px solid #b8c9be; border-radius: 8px; margin: 8px 0 14px; }
+    pre { background: #f4f6f3; border: 1px solid #e1e8e2; border-radius: 8px; padding: 16px; white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.65 ui-monospace, monospace; }
+    a { color: #225b42; }
+    footer { font-size: 13px; color: #53685e; }
+    [hidden] { display: none !important; }
+    @media (max-width: 600px) { main { padding: 28px 14px; } .panel { padding: 18px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="eyebrow">Developer example</div>
+      <h1>Import a Vendor Questionnaire</h1>
+      <p class="muted">Turn an Excel VQ into requirement IDs, response text, and suggested answers.</p>
+    </header>
+
+    <section id="dropzone" class="panel" aria-labelledby="drop-heading" aria-busy="false">
+      <h2 id="drop-heading">Drop your workbook here</h2>
+      <p class="muted">XLS, XLSX, XLSM, or XLSB · one file at a time</p>
+      <div class="actions">
+        <label class="file-button">Choose Excel file<input id="file-input" class="visually-hidden" type="file" accept=".xls,.xlsx,.xlsm,.xlsb"></label>
+        <button id="sample" type="button">Try sample workbook</button>
+      </div>
+      <small>Processed locally in your browser. <a href="./sample-vq.xlsx" download>Download sample</a></small>
+    </section>
+    <p id="status" role="status" aria-live="polite">Choose a workbook or try the sample to explore the returned data.</p>
+    <noscript>This example requires JavaScript.</noscript>
+
+    <div id="results" hidden>
+      <section class="panel" aria-labelledby="results-heading">
+        <div class="toolbar">
+          <div><h2 id="results-heading">Imported requirements</h2><small id="file-name"></small></div>
+          <div class="actions"><button id="export" type="button">Download JSON</button><button id="clear" type="button">Clear</button></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <caption id="summary"></caption>
+            <thead><tr><th scope="col">Requirement</th><th scope="col">Vendor Response</th><th scope="col">Prediction</th><th scope="col">Source</th></tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </section>
+      <section class="panel" aria-labelledby="lookup-heading">
+        <h2 id="lookup-heading">Look up a requirement</h2>
+        <label for="lookup">Requirement ID</label>
+        <input id="lookup" type="search" placeholder="e.g. 1.1 or SR 001.01" autocomplete="off">
+        <pre id="lookup-result" role="status" aria-live="polite">Enter an ID to see vq.get(id).</pre>
+      </section>
+    </div>
+    <section class="panel">
+      <h2>Use the data in your application</h2>
+      <pre><code>import { importVq } from '@yuriy-ackermann/cyberpass-vq-importer';
+
+const vq = await importVq(file);
+const rows = vq.rows;
+const requirement = vq.get('1.1');</code></pre>
+      <p class="muted">The prediction follows the text: starts with N/A → N/A; other content → YES; empty → NO. Your application decides how to review and apply these values.</p>
+    </section>
+    <footer>Made by Yuriy Ackermann · Independent example; not affiliated with FIDO Alliance or CyberPass.</footer>
+  </main>
+  <script type="module" src="./example.js"></script>
+</body>
+</html>

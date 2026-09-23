@@ -2,6 +2,10 @@
 
 CyberPass and other questionnaire platforms can use this package to decode a local Excel VQ into application data. It includes XLS/XLSX/XLSM/XLSB reading, requirement normalization, source locations, response prediction, and optional file input/drop-zone bindings.
 
+## Runnable HTML example
+
+See [examples/index.html](./examples/index.html) and the [run instructions](./examples/README.md). Serve this package directory with `python3 -m http.server 8080 --bind 127.0.0.1`, then open `http://127.0.0.1:8080/examples/`. The example includes a fictional sample workbook, file selection, drag and drop, a row table, `.get()` lookup, and JSON export. It ships in the package archive.
+
 ## Minimal integration
 
 ```ts
